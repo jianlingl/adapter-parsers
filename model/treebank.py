@@ -114,7 +114,7 @@ class Tree:
         else:
             text = ' '.join([child.linearize() for child in self.children])
         return '(%s %s)' % (self.label, text)
-  
+
 
 def build_label_vocab(trees: List[Tree]):
     labels = []
