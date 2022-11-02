@@ -1,0 +1,74 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Module",
+            "type": "python",
+            "request": "launch",
+            "module": "model.treebank",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "name": "test",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "test",
+                 "--device", "1",
+                 "--test-path", "data/universal/zh/Zh.u1.test",
+                 "--model-path", "log/models/zh0.pt"
+            ]
+        },
+
+        {
+            "name": "zh",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "train",
+                "--device",
+                "0",
+                "--model-path-base",
+                "log/models/zh0",
+                "--train-path",
+                "data/universal/zh/Zh.u1.dev",
+                "--dev-path",
+                "data/universal/zh/Zh.u1.dev",
+                "--test-path",
+                "data/universal/zh/Zh.u1.test",
+            ]
+        },
+        {
+            "name": "en",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "train",
+                "--device",
+                "0",
+                "--model-path-base",
+                "log/models/en0",
+                "--train-path",
+                "data/universal/en/En.u1.dev",
+                "--dev-path",
+                "data/universal/en/En.u1.dev",
+                "--test-path",
+                "data/universal/en/En.u1.test",
+            ]
+        }
+    ]
+}
