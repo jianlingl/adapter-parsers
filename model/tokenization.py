@@ -2,37 +2,37 @@ import torch
 from transformers import XLMRobertaTokenizer
 
 
-class Tokenizer():
-    def __init__(self, pretrained_model_name_or_path) -> None:
-        self.tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path)
+# class Tokenizer():
+#     def __init__(self, pretrained_model_name_or_path) -> None:
+#         self.tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path)
     
-    def __call__(self, words_list):
-        # 对于无法识别的符号，提前转换成unk_token
-        def clean_snt(words):
-            src_len = len(words)
-            for j, w_ in enumerate(words):
-                if len(self.tokenizer.tokenize(w_, add_special_tokens=False)) < 1:
-                    words[j] = self.tokenizer.unk_token
-            assert len(words) == src_len
-            return words
+#     def __call__(self, words_list):
+#         # 对于无法识别的符号，提前转换成unk_token
+#         def clean_snt(words):
+#             src_len = len(words)
+#             for j, w_ in enumerate(words):
+#                 if len(self.tokenizer.tokenize(w_, add_special_tokens=False)) < 1:
+#                     words[j] = self.tokenizer.unk_token
+#             assert len(words) == src_len
+#             return words
 
-        snts_cleaned = []
-        for words in words_list:
-            snt_cleaned = " ".join(clean_snt(words))
-            snts_cleaned.append(snt_cleaned)
+#         snts_cleaned = []
+#         for words in words_list:
+#             snt_cleaned = " ".join(clean_snt(words))
+#             snts_cleaned.append(snt_cleaned)
 
-        tokenized = self.tokenizer(
-                                    snts_cleaned,
-                                    padding='longest',
-                                    max_length=512,
-                                    truncation='longest_first',
-                                    return_attention_mask=True,
-                                    return_offsets_mapping=True,
-                                    return_tensors="pt"
-                                    )   
-        # ids, attention_mask, offsets_mapping = tokenized['input_ids'], tokenized['attention_mask'], tokenized['offsets_mapping']
+#         tokenized = self.tokenizer(
+#                                     snts_cleaned,
+#                                     padding='longest',
+#                                     max_length=512,
+#                                     truncation='longest_first',
+#                                     return_attention_mask=True,
+#                                     return_offsets_mapping=True,
+#                                     return_tensors="pt"
+#                                     )   
+#         # ids, attention_mask, offsets_mapping = tokenized['input_ids'], tokenized['attention_mask'], tokenized['offsets_mapping']
            
-        return tokenized
+#         return tokenized
 
 
 class Retokenizer():
