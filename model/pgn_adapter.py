@@ -93,10 +93,10 @@ class AdapterXLMRobertaModel(nn.Module):
 		super().__init__()
 		self.xlmr = XLMRobertaModel.from_pretrained(model_name_or_path)
 		
-		# for param in self.xlmr.parameters():
-		# 	param.requires_grad = False
+		for param in self.xlmr.parameters():
+			param.requires_grad = False
 		
-		# self.adapters_groups = self.insert_adapters(adapter_num, external_param)
+		self.adapters_groups = self.insert_adapters(adapter_num, external_param)
 	
 	def insert_adapters(self, adapters_num: int, external_param: bool) -> nn.ModuleList:
 		

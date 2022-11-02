@@ -159,8 +159,8 @@ def run_train(hparam: Hparam):
                 loss.backward()
             del loss
             
-            # if step % (check_step // 3) == 0:
-            #     printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
+            if step % (check_step // 3) == 0:
+                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
 
             if step % accm_steps == 0:
                 grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -170,7 +170,7 @@ def run_train(hparam: Hparam):
                 scheduler.step(metrics=best_dev_fscore)
                 optimizer.zero_grad()
 
-                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
+                # printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
 
                 batch_loss_value = 0.0
 
