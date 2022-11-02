@@ -8,7 +8,7 @@ import torch_struct
 from transformers import XLMRobertaModel
 
 from model.pgn_adapter import AdapterXLMRobertaModel
-from model.tokenization import Tokenizer, Retokenizer
+from model.tokenization import Retokenizer
 from model.encoder import ConcatTag, ConcatPosition, encoderStackLayer, PartitionedTransformerEncoderLayer, FeatureDropout
 from model.decoder import ChartDecoder
 # from config import Hparam
