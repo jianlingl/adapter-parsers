@@ -4,7 +4,6 @@ import subprocess
 import math
 import tempfile
 from typing import List, Optional, Tuple, Dict, Any
-from copy import deepcopy
 from tqdm import tqdm
 
 from model.treebank import Tree, write_tree, load_treebank, load_tree_from_str
@@ -53,8 +52,8 @@ class Metric():
 
 
 def eval_ups_lps(gold_trees: List[Tree], pred_trees: List[Tree], del_PUNCT=True, punct_tag="PUNCT", label_scores=False, label_set=[], len_scores=False, threshold=2, max_span_len=20):
-    g_trees = tree_del_PUNCT(deepcopy(gold_trees), punct_tag, del_PUNCT=del_PUNCT)
-    p_trees = tree_del_PUNCT(deepcopy(pred_trees), punct_tag, del_PUNCT=del_PUNCT)
+    g_trees = tree_del_PUNCT(gold_trees, punct_tag, del_PUNCT=del_PUNCT)
+    p_trees = tree_del_PUNCT(pred_trees, punct_tag, del_PUNCT=del_PUNCT)
 
     g_span_triples, p_span_triples = debinarize_and_get_span_triples(g_trees), debinarize_and_get_span_triples(p_trees)
     
@@ -266,8 +265,9 @@ def re_del_PUNCT(linear_tree, punct="PUNCT"):
 def tree_del_PUNCT(trees: List[Tree], punct_tag, del_PUNCT=True):
     if del_PUNCT:
         trees_no_punct = []
-        for tree in trees:
+        for t in trees:
             # # del on the tree
+            tree = load_tree_from_str(t.linearize(), top_exist=False)
             tree.del_PUNCT(punct_tag)
             tree = load_tree_from_str(tree.linearize(), top_exist=False)
             trees_no_punct.append(tree)

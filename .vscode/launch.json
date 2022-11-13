@@ -38,7 +38,7 @@
             "args": [
                 "train",
                 "--device",
-                "0",
+                "7",
                 "--model-path-base",
                 "log/models/zh0",
                 "--train-path",

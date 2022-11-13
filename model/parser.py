@@ -21,9 +21,9 @@ class Parser(nn.Module):
         # 预训练
         self.hparam = hparam
         self.tokenizer = Retokenizer(hparam.pretrain_model_path)
-        self.pretrain_model = XLMRobertaModel.from_pretrained(hparam.pretrain_model_path)
-        # self.pretrain_model = AdapterXLMRobertaModel(hparam.pretrain_model_path)
-        
+        # self.pretrain_model = XLMRobertaModel.from_pretrained(hparam.pretrain_model_path)
+        self.pretrain_model = AdapterXLMRobertaModel(hparam.pretrain_model_path)
+
         # 词表示
         self.tag_vocab = hparam.tag_vocab
         self.use_tag, self.use_position = hparam.use_tag, hparam.use_position
@@ -73,28 +73,30 @@ class Parser(nn.Module):
         input_ids, attention_mask, words_index, tag_ids, word_attention_mask = tokenized["input_ids"].to(self.device), tokenized["attention_mask"].to(self.device), tokenized["words_index"].to(self.device), tokenized["tag_ids"].to(self.device), tokenized["word_attention_mask"].to(self.device)
 
         # # span表示 # 在头尾多加一维
-        # words_index = torch.cat([words_index, torch.zeros(words_index.size()[0], 1, dtype=torch.long).to(self.device)], dim=-1)
-        # words_index[torch.arange(word_attention_mask.size()[0]), word_attention_mask.sum(-1)] = word_attention_mask.sum(-1)
-        # words_index = torch.cat([torch.zeros(words_index.size()[0], 1, dtype=torch.long).to(self.device), words_index], dim=-1)
-        # word_attention_mask = torch.cat([torch.ones(word_attention_mask.size()[0], 2, dtype=torch.bool).to(self.device), word_attention_mask], dim=-1)
-        # tag_ids = torch.cat([torch.zeros(tag_ids.size()[0], 1, dtype=int).to(self.device), tag_ids], dim=-1)
-        # tag_ids = torch.cat([tag_ids, torch.zeros(tag_ids.size()[0], 1, dtype=int).to(self.device)], dim=-1)
+        words_index = torch.cat([words_index, torch.zeros(words_index.size()[0], 1, dtype=torch.long).to(self.device)], dim=-1)
+        words_index[torch.arange(word_attention_mask.size()[0]), word_attention_mask.sum(-1)] = word_attention_mask.sum(-1)
+        words_index = torch.cat([torch.zeros(words_index.size()[0], 1, dtype=torch.long).to(self.device), words_index], dim=-1)
+        word_attention_mask = torch.cat([torch.ones(word_attention_mask.size()[0], 2, dtype=torch.bool).to(self.device), word_attention_mask], dim=-1)
+        tag_ids = torch.cat([torch.zeros(tag_ids.size()[0], 1, dtype=int).to(self.device), tag_ids], dim=-1)
+        tag_ids = torch.cat([tag_ids, torch.zeros(tag_ids.size()[0], 1, dtype=int).to(self.device)], dim=-1)
 
         # 预训练输出
         features = self.pretrain_model(input_ids, attention_mask).last_hidden_state
 
         # # span表示 # 奇偶位 -> 前向和后向的表示
-        # features = torch.cat([
-        #         features[..., 0::2],
-        #         features[..., 1::2],
-        #     ], dim=-1,
-        # )
+        features = torch.cat([
+                features[..., 0::2],
+                features[..., 1::2],
+            ], dim=-1,
+        )
 
         # 取头表示词
-        features_out = []
-        for i, w_index in enumerate(words_index):
-            features_out.append(features[i, w_index, :].unsqueeze(0))
-        word_repre = torch.cat(features_out, dim=0)
+        # features_out = []
+        # for i, w_index in enumerate(words_index):
+        #     features_out.append(features[i, w_index, :].unsqueeze(0))
+        # word_repre = torch.cat(features_out, dim=0)
+        batch_index = torch.arange(features.size()[0]).unsqueeze(-1)
+        word_repre = features[batch_index, words_index, :]
 
         # 获取更全面词表示
         if self.use_tag:
@@ -139,24 +141,24 @@ class Parser(nn.Module):
         return loss
 
     def span_features(self, features_out):
-        words_num = features_out.size()[1]
-        features_i = features_out.unsqueeze(2).expand(-1, -1, words_num, -1)
-        features_j = features_out.unsqueeze(1).expand(-1, words_num, -1, -1)
-        features = self.span_linear(torch.cat((features_i, features_j), dim=-1))
-        return features
+        # words_num = features_out.size()[1]
+        # features_i = features_out.unsqueeze(2).expand(-1, -1, words_num, -1)
+        # features_j = features_out.unsqueeze(1).expand(-1, words_num, -1, -1)
+        # features = self.span_linear(torch.cat((features_i, features_j), dim=-1))
+        # return features
 
-        # fencepost_annotations = torch.cat([
-        #         features_out[:, :-1, :768//2],
-        #         features_out[:, 1:, 768//2:],
-        #     ], dim=-1,
-        # )
+        fencepost_annotations = torch.cat([
+                features_out[:, :-1, :768//2],
+                features_out[:, 1:, 768//2:],
+            ], dim=-1,
+        )
 
-        # # Note that the bias added to the final layer norm is useless because
-        # # this subtraction gets rid of it
-        # span_features = (
-        #     torch.unsqueeze(fencepost_annotations, 1) - torch.unsqueeze(fencepost_annotations, 2)
-        # )[:, :-1, 1:]  # 分别在第一维和第二维加一个维度  8x1xNx1024-8xNx1x1024
-        # return span_features
+        # Note that the bias added to the final layer norm is useless because
+        # this subtraction gets rid of it
+        span_features = (
+            torch.unsqueeze(fencepost_annotations, 1) - torch.unsqueeze(fencepost_annotations, 2)
+        )[:, :-1, 1:]  # 分别在第一维和第二维加一个维度  8x1xNx1024-8xNx1x1024
+        return span_features
 
     def encode_and_collate(self, trees: List[Tree]):
         batched_words = [list(tree.leaves()) for tree in trees]

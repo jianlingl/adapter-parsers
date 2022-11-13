@@ -69,7 +69,7 @@ class AdapterBertLayer(nn.Module):
     替代 BertOutput 和 BertSelfOutput
     """
     def __init__(self, base: Union[BertOutput, BertSelfOutput], adapter: Adapter):
-        super().__init__()
+        super(AdapterBertLayer, self).__init__()
         self.base = base
         self.adapter = adapter
         for param in base.LayerNorm.parameters():
@@ -84,97 +84,97 @@ class AdapterBertLayer(nn.Module):
 
 
 class AdapterXLMRobertaModel(nn.Module):
-	def __init__(
+    def __init__(
         self,
         model_name_or_path: str,
         adapter_num: int = 12,
         external_param: Union[bool, List[bool]] = False
     ):
-		super().__init__()
-		self.xlmr = XLMRobertaModel.from_pretrained(model_name_or_path)
-		
-		for param in self.xlmr.parameters():
-			param.requires_grad = False
-		
-		self.adapters_groups = self.insert_adapters(adapter_num, external_param)
-	
-	def insert_adapters(self, adapters_num: int, external_param: bool) -> nn.ModuleList:
-		
-		adapters_groups = nn.ModuleList()
-		for i in range(adapters_num):
-			
-			adapter_a = Adapter(dynamic_weights=external_param)
-			adapter_f = Adapter(dynamic_weights=external_param)
+        super(AdapterXLMRobertaModel, self).__init__()
+        self.xlmr = XLMRobertaModel.from_pretrained(model_name_or_path)
 
-			layer = self.xlmr.encoder.layer[i]
-			layer.output = AdapterBertLayer(layer.output, adapter_a)
-			layer.attention.output = AdapterBertLayer(layer.attention.output, adapter_f)
-			
-			adapters_groups.append(nn.ModuleList([adapter_a, adapter_f]))
-		
-		return adapters_groups
-	
-	def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor = None, **kwargs):
-		return self.xlmr(input_ids, attention_mask, **kwargs)  # (sequence_output, pooled_output) + encoder_outputs[1:]
+        for param in self.xlmr.parameters():
+          param.requires_grad = False
+
+        self.adapters_groups = self.insert_adapters(adapter_num, external_param)
+
+    def insert_adapters(self, adapters_num: int, external_param: bool) -> nn.ModuleList:
+
+        adapters_groups = nn.ModuleList()
+        for i in range(adapters_num):
+
+            adapter_a = Adapter(dynamic_weights=external_param)
+            adapter_f = Adapter(dynamic_weights=external_param)
+
+            layer = self.xlmr.encoder.layer[i]
+            layer.output = AdapterBertLayer(layer.output, adapter_a)
+            layer.attention.output = AdapterBertLayer(layer.attention.output, adapter_f)
+
+            adapters_groups.append(nn.ModuleList([adapter_a, adapter_f]))
+
+        return adapters_groups
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor = None, **kwargs):
+        return self.xlmr(input_ids, attention_mask, **kwargs)  # (sequence_output, pooled_output) + encoder_outputs[1:]
 
 
 class PGNAdapterXLMRobertaModel(AdapterXLMRobertaModel):
-	def __init__(self,
-				 model_name_or_path: str,
-				 lan_dim: int = 8,
-				 lan_num: int = 3,
-				 adapter_size: int = 128,
-				 pgn_layers: int = 12,
-				 share_param: bool = False):
-		super().__init__(model_name_or_path, adapter_size, pgn_layers, True)
-		
-		# self.embedding = nn.Embedding(lan_num, lan_dim)
-		self.embedding = nn.Embedding(3, lan_dim)
-		self.pgns_groups = self.pgns_groups_init(lan_dim)
-		
-	def pgns_groups_init(self, pgn_emb_dim: int) -> nn.ModuleList:
-		pgns_groups = nn.ModuleList()
-		for adapters_group in self.adapters_groups:
-			pgns_group = nn.ModuleList()
-			for adapter in adapters_group:
-				weights_dict = {
-					'weight_down': nn.Parameter(init.normal_(torch.Tensor(
-						adapter.in_feats, adapter.adapter_size, pgn_emb_dim), std=1e-3)),
-					'weight_up': nn.Parameter(init.normal_(torch.Tensor(
-						adapter.adapter_size, adapter.in_feats, pgn_emb_dim), std=1e-3))
-				}
-				if adapter.bias:
-					weights_dict['bias_down'] = nn.Parameter(torch.zeros(adapter.adapter_size, pgn_emb_dim))
-					weights_dict['bias_up'] = nn.Parameter(torch.zeros(adapter.in_feats, pgn_emb_dim))
-				pgns_group.append(nn.ParameterDict(weights_dict))
-			assert len(pgns_group) == len(adapters_group)
-			pgns_groups.append(pgns_group)
-		assert len(pgns_groups) == len(self.adapters_groups)
-		return pgns_groups
+    def __init__(self,
+                model_name_or_path: str,
+                lan_dim: int = 8,
+                lan_num: int = 3,
+                adapter_size: int = 128,
+                pgn_layers: int = 12,
+                share_param: bool = False):
+        super().__init__(model_name_or_path, pgn_layers, True)
 
-	def forward(self, lan_ids: torch.LongTensor, input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
-		self.parameters_generation(lan_ids)
-		res = self.xlmr(input_ids, **kwargs)
-		self.flush_parameters()
-		return res
-	
-	def parameters_generation(self, pgn_ids: torch.LongTensor) -> None:
-		e = torch.matmul(pgn_ids, self.embedding.weight)  # [batch, dim]
-		
-		for adapters_g, pgns_g in zip(self.adapters_groups, self.pgns_groups):
-			for adapter, pgn in zip(adapters_g, pgns_g):
-				for weight_name, pgn_weight in pgn.items():
-					ALPHA = 'abcdefg'
-					dims = ALPHA[:pgn_weight.dim() - 1]
-					adapter_weight = torch.einsum(f'{dims}k,nk->n{dims}', pgn_weight, e)
-					adapter.update_weight(weight_name, adapter_weight)
-	
-	def flush_parameters(self):
-		for adapters_g, pgns_g in zip(self.adapters_groups, self.pgns_groups):
-			for adapter, pgn in zip(adapters_g, pgns_g):
-				for weight_name, pgn_weight in pgn.items():
-					adapter.update_weight(weight_name, None)
-	
-	# def forward(self, lan_id, input_ids: torch.Tensor, mask: torch.Tensor = None, **kwargs):
-	# 	self.set_lan(lan_id)
-	# 	return self.xlmr(input_ids, mask, **kwargs)  # (sequence_output, pooled_output) + encoder_outputs[1:]
+        # self.embedding = nn.Embedding(lan_num, lan_dim)
+        self.embedding = nn.Embedding(3, lan_dim)
+        self.pgns_groups = self.pgns_groups_init(lan_dim)
+
+    def pgns_groups_init(self, pgn_emb_dim: int) -> nn.ModuleList:
+        pgns_groups = nn.ModuleList()
+        for adapters_group in self.adapters_groups:
+            pgns_group = nn.ModuleList()
+            for adapter in adapters_group:
+                weights_dict = {
+                    'weight_down': nn.Parameter(init.normal_(torch.Tensor(
+                        adapter.in_feats, adapter.adapter_size, pgn_emb_dim), std=1e-3)),
+                    'weight_up': nn.Parameter(init.normal_(torch.Tensor(
+                        adapter.adapter_size, adapter.in_feats, pgn_emb_dim), std=1e-3))
+                }
+                if adapter.bias:
+                    weights_dict['bias_down'] = nn.Parameter(torch.zeros(adapter.adapter_size, pgn_emb_dim))
+                    weights_dict['bias_up'] = nn.Parameter(torch.zeros(adapter.in_feats, pgn_emb_dim))
+                pgns_group.append(nn.ParameterDict(weights_dict))
+            assert len(pgns_group) == len(adapters_group)
+            pgns_groups.append(pgns_group)
+        assert len(pgns_groups) == len(self.adapters_groups)
+        return pgns_groups
+
+    def forward(self, lan_ids: torch.LongTensor, input_ids: torch.Tensor, attention_mask: torch.Tensor, **kwargs) -> torch.Tensor:
+        self.parameters_generation(lan_ids)
+        res = self.xlmr(input_ids, attention_mask, **kwargs)
+        self.flush_parameters()
+        return res
+
+    def parameters_generation(self, pgn_ids: torch.LongTensor) -> None:
+        e = torch.matmul(pgn_ids, self.embedding.weight)  # [batch, dim]
+
+        for adapters_g, pgns_g in zip(self.adapters_groups, self.pgns_groups):
+            for adapter, pgn in zip(adapters_g, pgns_g):
+                for weight_name, pgn_weight in pgn.items():
+                    ALPHA = 'abcdefg'
+                    dims = ALPHA[:pgn_weight.dim() - 1]
+                    adapter_weight = torch.einsum(f'{dims}k,nk->n{dims}', pgn_weight, e)
+                    adapter.update_weight(weight_name, adapter_weight)
+
+    def flush_parameters(self):
+        for adapters_g, pgns_g in zip(self.adapters_groups, self.pgns_groups):
+            for adapter, pgn in zip(adapters_g, pgns_g):
+                for weight_name, pgn_weight in pgn.items():
+                    adapter.update_weight(weight_name, None)
+
+    # def forward(self, lan_id, input_ids: torch.Tensor, mask: torch.Tensor = None, **kwargs):
+    #   self.set_lan(lan_id)
+    #   return self.xlmr(input_ids, mask, **kwargs)  # (sequence_output, pooled_output) + encoder_outputs[1:]

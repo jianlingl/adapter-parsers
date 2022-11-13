@@ -45,21 +45,16 @@ class Retokenizer():
         for words_list in batched_words_list:
             
             input_ids, head_index = [], []
-            offset = 0
-            for idx, word in enumerate(words_list):
+            for word in words_list:
                 tokenized = self.tokenizer(word, add_special_tokens=False, return_attention_mask=False)["input_ids"]
                 for_del = self.tokenizer.convert_tokens_to_ids('▁')
                 if for_del in tokenized:
                     tokenized.remove(for_del)  # 将所有补位的▁都删除
-
-                if len(tokenized) < 1:
-                    input_ids.append(self.tokenizer.unk_token_id)
-                    head_index.append(idx + 1 + offset) # head_index 从1开始，最后计算的时候直接获取word表示，不考虑<s>和 </s>
-                else:
-                    input_ids += tokenized
-                    head_index.append(idx + 1 + offset) # head_index 从1开始，最后计算的时候直接获取word表示，不考虑<s>和 </s>
-
-                offset += (len(tokenized)-1)
+                
+                head_index.append(len(input_ids) + 1)
+                if len(tokenized) == 0:
+                    tokenized.append(self.tokenizer.unk_token_id)
+                input_ids.extend(tokenized)
 
             input_ids = [self.tokenizer.bos_token_id] + input_ids + [self.tokenizer.eos_token_id]
             input_ids_list.append(input_ids)

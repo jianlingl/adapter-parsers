@@ -36,10 +36,10 @@ class ChartDecoder():
         if k != -1:
             treeL = self.build_tree(tree_split_table, best_label_table, leaf_list, tag_list, left, k)
             treeR = self.build_tree(tree_split_table, best_label_table, leaf_list, tag_list, k+1, right)
-            tree = Tree(label, [treeL, treeR], left, right)
+            tree = Tree(label, [treeL, treeR], left, right + 1)
         else:
-            leaf_tag = Tree(tag_list[left], leaf_list[left], left, right)
-            tree = Tree(label, [leaf_tag], left, right)
+            leaf_tag = Tree(tag_list[left], leaf_list[left], left, right + 1)
+            tree = Tree(label, [leaf_tag], left, right + 1)
         return tree
     
     def tree_from_chart(self, logits :torch.Tensor, len_list: List[int], leaves: List[List[str]], tags: List[List[str]]):

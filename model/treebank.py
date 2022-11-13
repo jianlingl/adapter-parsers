@@ -1,4 +1,3 @@
-from copy import deepcopy
 from model.data_unscape import ptb_unescape
 from typing import List
 
@@ -21,13 +20,8 @@ class Tree:
                 yield from child.leaves()
 
     def del_PUNCT(self, puct: str):
-        flag = False
-
         if self.is_leaf:
-            if self.label == puct:
-                flag = True
-            else:
-                flag = False
+            flag = True if self.label == puct else False
         else:
             new_children = []
             for child in self.children:
@@ -36,10 +30,7 @@ class Tree:
                     new_children.append(child)
             self.children = new_children
 
-            if len(self.children) == 0:
-                flag = True
-            else:
-                flag = False
+            flag = True if len(self.children) == 0 else False
 
         return flag
 
@@ -52,30 +43,32 @@ class Tree:
     
     def binarization(self):
         if not self.is_leaf:
-            if len(self.children) == 1 and not self.children[0].is_leaf:
+            while len(self.children) == 1 and not self.children[0].is_leaf:
                 self.label = self.label + '::' + self.children[0].label
                 self.children = self.children[0].children
-            
-            if len(self.children) > 2:
-                multi_child = self.children[1:]
 
-                self.children = self.children[:1]
-                new_treelet = Tree('*', multi_child, multi_child[0].left, multi_child[-1].right)
-                self.children.append(new_treelet)
-
+            # 深度优先后续遍历
             for child in self.children:
                 child.binarization()
 
+            if len(self.children) > 2:
+                left_child = self.children[0]
+                if left_child.is_leaf:
+                    left_child = Tree("*", [left_child], left_child.left, left_child.right)
+
+                multi_child = self.children[1:]
+                right_child = Tree("*", multi_child, multi_child[0].left, multi_child[-1].right)
+
+                self.children = [left_child, right_child]
+
     def debinarization(self):
         if not self.is_leaf:
-            if '::' in self.label:
+            while '::' in self.label:
                 label_list = self.label.split('::')
-                label_this_node = label_list[0]
-                label_next_node = '::'.join(label_list[1:])
-
-                self.label = label_this_node
-                extra_child = Tree(label_next_node, self.children, self.left, self.right)
-                self.children = [extra_child]
+                label_tail = label_list[-1]
+                label_father = '::'.join(label_list[:-1])
+                self.label = label_father
+                self.children = [Tree(label_tail, self.children, self.left, self.right)]
 
             # 深度优先后续遍历
             for child in self.children:
@@ -175,20 +168,23 @@ def write_tree(tree_list: List[Tree], path):
 def load_treebank(path, binarize=True, max_snt_len: int=150, top_exist: bool=True):
     trees = []
     for bracket_line in open(path, 'r', encoding='utf-8'):
-        tree = load_tree_from_str(bracket_line, top_exist=top_exist)
-        if len(list(tree.leaves())) >= max_snt_len:
+        t = load_tree_from_str(bracket_line, top_exist=top_exist)
+        if len(list(t.leaves())) >= max_snt_len:
             continue
 
         # 二叉化
         if binarize:
-            binarizedTree = deepcopy(tree)
-            binarizedTree.binarization()
-            debinarizedTree = deepcopy(binarizedTree)
-            debinarizedTree.debinarization()
-            assert debinarizedTree.linearize() == tree.linearize(), "debinarization can not reverse to original tree"
-            trees.append(binarizedTree)
+            origin_t_str = t.linearize()
+            t.binarization()
+            trees.append(t)
+            
+            # Check the binarization and debinarization
+            t_ = load_tree_from_str(t.linearize(), top_exist=False)
+            t_.debinarization()
+            assert t_.linearize() == origin_t_str, "debinarization can not reverse to original tree"
+
         else:
-            trees.append(tree)
+            trees.append(t)
     
     print(path)
     print(len(trees))
