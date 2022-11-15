@@ -1,17 +1,21 @@
+import math
 from model.data_unscape import ptb_unescape
 from typing import List
 
 
 class Tree:
-    def __init__(self, label, children, left, right) -> None:
-        
-        self.label = label
+    def __init__(self, label, children, left, right, prob_join_label=False) -> None:
+        if prob_join_label:
+            prob, label = label.split('|||')
+            self.prob, self.label = float(prob), label
+        else:
+            self.prob, self.label = None, label
         self.word = None if not isinstance(children, str) else children
         self.children = children if not isinstance(children, str) else None
         self.left = left
         self.right = right
         self.is_leaf = False if self.word is None else True
-    
+
     def leaves(self):
         if self.is_leaf:
             yield self.word
@@ -40,56 +44,58 @@ class Tree:
         else:
             for child in self.children:
                 yield from child.pos()
-    
-    def binarization(self):
+
+    def binarize(self):
         if not self.is_leaf:
             while len(self.children) == 1 and not self.children[0].is_leaf:
-                self.label = self.label + '::' + self.children[0].label
+                self.label += '::' + self.children[0].label
                 self.children = self.children[0].children
-
-            # 深度优先后续遍历
-            for child in self.children:
-                child.binarization()
 
             if len(self.children) > 2:
                 left_child = self.children[0]
-                if left_child.is_leaf:
-                    left_child = Tree("*", [left_child], left_child.left, left_child.right)
-
-                multi_child = self.children[1:]
-                right_child = Tree("*", multi_child, multi_child[0].left, multi_child[-1].right)
-
+                right_child = Tree('*', self.children[1:], self.children[1].left, self.children[-1].right)
                 self.children = [left_child, right_child]
 
-    def debinarization(self):
+            # if len(self.children) == 2:
+            #     left_child, right_child = self.children[0], self.children[1]
+            #     if left_child.is_leaf:
+            #         left_child = Tree('*', [left_child], left_child.left, left_child.right)
+            #     if right_child.is_leaf:
+            #         right_child = Tree('*', [right_child], right_child.left, right_child.right)
+            #     self.children = [left_child, right_child]
+
+            for child in self.children:
+                child.binarize()
+
+    def debinarize(self):
         if not self.is_leaf:
             while '::' in self.label:
                 label_list = self.label.split('::')
-                label_tail = label_list[-1]
-                label_father = '::'.join(label_list[:-1])
-                self.label = label_father
+                label_this, label_tail = '::'.join(label_list[:-1]), label_list[-1]
+                self.label = label_this
                 self.children = [Tree(label_tail, self.children, self.left, self.right)]
 
-            # 深度优先后续遍历
             for child in self.children:
-                child.debinarization()
+                child.debinarize()
 
-            new_children = []
+            child_list = []
             for child in self.children:
-                if child.label == '*':
-                    new_children.extend(child.children)
+                if '*' in child.label:
+                    child_list.extend(child.children)
                 else:
-                    new_children.append(child)
-            self.children = new_children
-    
+                    child_list.append(child)
+            self.children = child_list
+
     def span_labels(self):
-        if not self.is_leaf:
-            yield self.label
-        if not self.is_leaf:
+        if self.is_leaf:
+            res = []
+        else:
+            res = [self.label]
             for child in self.children:
-                yield from child.span_labels()
-    
-    def get_labeled_spans(self, strip_top=True):
+                res += child.span_labels()
+        return res
+
+    def get_labeled_spans0(self, strip_top=True):
         if not self.is_leaf:
             if strip_top:
                 if self.label != 'TOP':
@@ -99,8 +105,36 @@ class Tree:
 
         if not self.is_leaf:
             for child in self.children:
-                yield from child.get_labeled_spans()
-        
+                yield from child.get_labeled_spans0(strip_top)
+
+    def get_labeled_spans(self, strip_top=True, prob=False):
+        if self.is_leaf:
+            res = []
+        else:
+            if strip_top and self.label == 'TOP':
+                res = []
+                for child in self.children:
+                    res += child.get_labeled_spans(strip_top, prob)
+            else:
+                if prob:
+                    res = [(self.left, self.right, self.label, self.prob)]
+                else:
+                    res = [(self.left, self.right, self.label)]
+                for child in self.children:
+                    res += child.get_labeled_spans(strip_top, prob)
+        return res
+
+    def cal_span_prob(self):
+        if not self.is_leaf:
+            for child in self.children:
+                child.cal_span_prob()
+
+            prob = 1.0
+            for child in self.children:
+                assert child.prob is not None and child.prob != -1, "the child prob has not been updated"
+                prob *= child.prob
+            self.prob = math.pow(prob, 1/len(self.children))
+
     def linearize(self):
         if self.is_leaf:
             text = self.word
@@ -112,7 +146,7 @@ class Tree:
 def build_label_vocab(trees: List[Tree]):
     labels = []
     for tree in trees:
-        labels += list(tree.span_labels())
+        labels += tree.span_labels()
     label_set = sorted(set(labels))
     label_set.remove('*')
     label_set = ['*'] + label_set
@@ -161,7 +195,7 @@ def build_tree(tokens, idx, span_left_idx):
 def write_tree(tree_list: List[Tree], path):
     with open(path, 'w', encoding='utf-8') as W:
         for tree in tree_list:
-            tree.debinarization()
+            tree.debinarize()
             W.write(Tree("TOP", [tree], tree.left, tree.right).linearize() + '\n')
 
 
@@ -175,12 +209,12 @@ def load_treebank(path, binarize=True, max_snt_len: int=150, top_exist: bool=Tru
         # 二叉化
         if binarize:
             origin_t_str = t.linearize()
-            t.binarization()
+            t.binarize()
             trees.append(t)
-            
+
             # Check the binarization and debinarization
             t_ = load_tree_from_str(t.linearize(), top_exist=False)
-            t_.debinarization()
+            t_.debinarize()
             assert t_.linearize() == origin_t_str, "debinarization can not reverse to original tree"
 
         else:
