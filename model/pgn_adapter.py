@@ -22,7 +22,7 @@ def batched_linear(x: torch.Tensor, w: torch.Tensor, b: Optional[torch.Tensor]) 
 class Adapter(nn.Module):
 
     def __init__(
-        self, in_feats: int = 768, adapter_size: int = 64, bias: bool = True,
+        self, in_feats: int = 768, adapter_size: int = 128, bias: bool = True,
         train_layer_norm: bool = True, dynamic_weights: bool = False
     ):
         super(Adapter, self).__init__()
@@ -88,6 +88,7 @@ class AdapterXLMRobertaModel(nn.Module):
         self,
         model_name_or_path: str,
         adapter_num: int = 12,
+        adapter_size: int = 128,
         external_param: Union[bool, List[bool]] = False
     ):
         super(AdapterXLMRobertaModel, self).__init__()
@@ -96,15 +97,15 @@ class AdapterXLMRobertaModel(nn.Module):
         for param in self.xlmr.parameters():
           param.requires_grad = False
 
-        self.adapters_groups = self.insert_adapters(adapter_num, external_param)
+        self.adapters_groups = self.insert_adapters(adapter_num, adapter_size, external_param)
 
-    def insert_adapters(self, adapters_num: int, external_param: bool) -> nn.ModuleList:
+    def insert_adapters(self, adapters_num: int, adapter_size: int, external_param: bool) -> nn.ModuleList:
 
         adapters_groups = nn.ModuleList()
         for i in range(adapters_num):
 
-            adapter_a = Adapter(dynamic_weights=external_param)
-            adapter_f = Adapter(dynamic_weights=external_param)
+            adapter_a = Adapter(adapter_size=adapter_size, dynamic_weights=external_param)
+            adapter_f = Adapter(adapter_size=adapter_size, dynamic_weights=external_param)
 
             layer = self.xlmr.encoder.layer[i]
             layer.output = AdapterBertLayer(layer.output, adapter_a)
@@ -121,15 +122,14 @@ class AdapterXLMRobertaModel(nn.Module):
 class PGNAdapterXLMRobertaModel(AdapterXLMRobertaModel):
     def __init__(self,
                 model_name_or_path: str,
-                lan_dim: int = 8,
+                lan_dim: int = 16,
                 lan_num: int = 3,
                 adapter_size: int = 128,
                 pgn_layers: int = 12,
                 share_param: bool = False):
-        super().__init__(model_name_or_path, pgn_layers, True)
+        super().__init__(model_name_or_path, pgn_layers, adapter_size=adapter_size, external_param=True)
 
-        # self.embedding = nn.Embedding(lan_num, lan_dim)
-        self.embedding = nn.Embedding(3, lan_dim)
+        self.embedding = nn.Embedding(lan_num, lan_dim)
         self.pgns_groups = self.pgns_groups_init(lan_dim)
 
     def pgns_groups_init(self, pgn_emb_dim: int) -> nn.ModuleList:

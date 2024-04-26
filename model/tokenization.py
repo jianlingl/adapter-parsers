@@ -1,5 +1,5 @@
 import torch
-from transformers import XLMRobertaTokenizer
+from transformers import XLMRobertaTokenizer, AutoTokenizer
 
 
 # class Tokenizer():
@@ -38,7 +38,16 @@ from transformers import XLMRobertaTokenizer
 class Retokenizer():
 
     def __init__(self, pretrained_model_name_or_path):
-        self.tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path)
+        if 'bert-base-cased' in pretrained_model_name_or_path:
+            self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+            self.unk_id = self.tokenizer.unk_token_id
+            self.bos_id = self.tokenizer.cls_token_id
+            self.eos_id = self.tokenizer.sep_token_id
+        else:
+            self.tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path)
+            self.unk_id = self.tokenizer.unk_token_id
+            self.bos_id = self.tokenizer.bos_token_id
+            self.eos_id = self.tokenizer.eos_token_id
 
     def __call__(self, batched_words_list):        
         input_ids_list, words_index_list = [], []
@@ -53,10 +62,11 @@ class Retokenizer():
                 
                 head_index.append(len(input_ids) + 1)
                 if len(tokenized) == 0:
-                    tokenized.append(self.tokenizer.unk_token_id)
+                    tokenized.append(self.unk_id)
                 input_ids.extend(tokenized)
 
-            input_ids = [self.tokenizer.bos_token_id] + input_ids + [self.tokenizer.eos_token_id]
+            input_ids = [self.bos_id] + input_ids + [self.eos_id]
+
             input_ids_list.append(input_ids)
             words_index_list.append(head_index)
         

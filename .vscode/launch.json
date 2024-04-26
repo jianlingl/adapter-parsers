@@ -8,7 +8,7 @@
             "name": "Python: Module",
             "type": "python",
             "request": "launch",
-            "module": "model.treebank",
+            "module": "model.eval",
             "justMyCode": false,
             "cwd": "${workspaceFolder}"
         },
@@ -22,14 +22,13 @@
             "justMyCode": false,
             "args": [
                 "test",
-                 "--device", "1",
-                 "--test-path", "data/universal/zh/Zh.u1.test",
-                 "--model-path", "log/models/zh0.pt"
+                 "--device", "0",
+                 "--test-path", "data/universal/en/En.u1.test",
+                 "--model-path", "log/models/xxx.pt"
             ]
         },
-
         {
-            "name": "zh",
+            "name": "train",
             "type": "python",
             "request": "launch",
             "program": "${file}",
@@ -37,38 +36,22 @@
             "justMyCode": false,
             "args": [
                 "train",
+                "--seed",
+                "8888",
                 "--device",
-                "7",
+                "4",
                 "--model-path-base",
-                "log/models/zh0",
+                "log/saved_parsers/000",
                 "--train-path",
-                "data/universal/zh/Zh.u1.dev",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/before/en_train.txt",
+                // "data/universal/ja.train",
                 "--dev-path",
-                "data/universal/zh/Zh.u1.dev",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/before/en_dev.txt",
+                // "data/universal/ja.dev",
                 "--test-path",
-                "data/universal/zh/Zh.u1.test",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/before/en_test.txt",
+                // "data/universal/ja.test",
             ]
         },
-        {
-            "name": "en",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "args": [
-                "train",
-                "--device",
-                "0",
-                "--model-path-base",
-                "log/models/en0",
-                "--train-path",
-                "data/universal/en/En.u1.dev",
-                "--dev-path",
-                "data/universal/en/En.u1.dev",
-                "--test-path",
-                "data/universal/en/En.u1.test",
-            ]
-        }
     ]
 }

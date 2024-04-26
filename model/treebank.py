@@ -23,13 +23,13 @@ class Tree:
             for child in self.children:
                 yield from child.leaves()
 
-    def del_PUNCT(self, puct: str):
+    def del_PUNCT(self, pucts: List[str]):
         if self.is_leaf:
-            flag = True if self.label == puct else False
+            flag = True if self.label in pucts else False
         else:
             new_children = []
             for child in self.children:
-                flag = child.del_PUNCT(puct)
+                flag = child.del_PUNCT(pucts)
                 if not flag:
                     new_children.append(child)
             self.children = new_children
@@ -55,14 +55,6 @@ class Tree:
                 left_child = self.children[0]
                 right_child = Tree('*', self.children[1:], self.children[1].left, self.children[-1].right)
                 self.children = [left_child, right_child]
-
-            # if len(self.children) == 2:
-            #     left_child, right_child = self.children[0], self.children[1]
-            #     if left_child.is_leaf:
-            #         left_child = Tree('*', [left_child], left_child.left, left_child.right)
-            #     if right_child.is_leaf:
-            #         right_child = Tree('*', [right_child], right_child.left, right_child.right)
-            #     self.children = [left_child, right_child]
 
             for child in self.children:
                 child.binarize()
@@ -95,33 +87,18 @@ class Tree:
                 res += child.span_labels()
         return res
 
-    def get_labeled_spans0(self, strip_top=True):
-        if not self.is_leaf:
-            if strip_top:
-                if self.label != 'TOP':
-                    yield (self.left, self.right, self.label)
-            else:
-                yield (self.left, self.right, self.label)
 
-        if not self.is_leaf:
-            for child in self.children:
-                yield from child.get_labeled_spans0(strip_top)
-
-    def get_labeled_spans(self, strip_top=True, prob=False):
+    def get_labeled_spans(self, strip_top=True):
         if self.is_leaf:
             res = []
         else:
-            if strip_top and self.label == 'TOP':
+            if strip_top and self.label in ['TOP', 'ROOT', 'root']:
                 res = []
-                for child in self.children:
-                    res += child.get_labeled_spans(strip_top, prob)
             else:
-                if prob:
-                    res = [(self.left, self.right, self.label, self.prob)]
-                else:
-                    res = [(self.left, self.right, self.label)]
-                for child in self.children:
-                    res += child.get_labeled_spans(strip_top, prob)
+                res = [(self.left, self.right, self.label)]
+
+            for child in self.children:
+                res += child.get_labeled_spans(strip_top)
         return res
 
     def cal_span_prob(self):
@@ -199,11 +176,11 @@ def write_tree(tree_list: List[Tree], path):
             W.write(Tree("TOP", [tree], tree.left, tree.right).linearize() + '\n')
 
 
-def load_treebank(path, binarize=True, max_snt_len: int=150, top_exist: bool=True):
+def load_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool=True):
     trees = []
     for bracket_line in open(path, 'r', encoding='utf-8'):
-        t = load_tree_from_str(bracket_line, top_exist=top_exist)
-        if len(list(t.leaves())) >= max_snt_len:
+        t = load_tree_from_str(bracket_line, del_top=del_top)
+        if too_long and too_long(' '.join(list(t.leaves()))):
             continue
 
         # 二叉化
@@ -213,7 +190,7 @@ def load_treebank(path, binarize=True, max_snt_len: int=150, top_exist: bool=Tru
             trees.append(t)
 
             # Check the binarization and debinarization
-            t_ = load_tree_from_str(t.linearize(), top_exist=False)
+            t_ = load_tree_from_str(t.linearize(), del_top=False)
             t_.debinarize()
             assert t_.linearize() == origin_t_str, "debinarization can not reverse to original tree"
 
@@ -222,19 +199,21 @@ def load_treebank(path, binarize=True, max_snt_len: int=150, top_exist: bool=Tru
     
     print(path)
     print(len(trees))
-    return trees
+    if sort:
+        return sorted(trees, key=lambda x: len(list(x.leaves())))
+    else:
+        return trees
 
 
-def load_tree_from_str(bracket_line: str, top_exist: bool=True):
+def load_tree_from_str(bracket_line: str, del_top: bool=True):
     assert bracket_line.count('(') == bracket_line.count(')')
 
     tokens = bracket_line.replace('(', ' ( ').replace(')',' ) ').split()
     idx, span_left_idx = 0, 0
     tree, _, _ = build_tree(tokens, idx, span_left_idx)
 
-    if top_exist:
-        # 处理根节点TOP
-        if len(tree.children) == 1 and tree.label == 'TOP':
+    if del_top:
+        if len(tree.children) == 1 and tree.label in ['TOP', 'ROOT', 'root']:
             tree = tree.children[0]
         else:
             tree.label = "S"
@@ -242,37 +221,14 @@ def load_tree_from_str(bracket_line: str, top_exist: bool=True):
     return tree
 
 
-# def guess_lan(path):
-    if 'zh' in path or 'zh_from' in path or 'Zh' in path:
-        lan = 'zh'
-    elif 'wsj' in path or 'en_from' in path or 'En' in path:
-        lan = 'en'
-    elif 'german' in path or 'de_from' in path or 'De' in path:
-        lan = 'de'
-    elif 'french' in path or 'fr_from' in path or 'Fr' in path:
-        lan = 'fr'
-    elif 'korean' in path or 'ko_from' in path or 'Ko' in path:
-        lan = 'ko'
-    elif 'he' in path or 'he_from' in path or 'He' in path:
-        lan = 'he'
-    elif 'hu' in path or 'hu_from' in path or 'Hu' in path:
-        lan = 'hu'
-    elif 'ja' in path or 'ja_from' in path or 'Ja' in path:
-        lan = 'ja'
-    elif 'sv' in path or 'sv_from' in path or 'Sv' in path:
-        lan = 'sv'
-    else:
-        lan = 'None'
-    return lan
-
-
-# if __name__ == "__main__":
-#     path_ = [["data/universal/en/En.u1.dev", "data/universal/en_dev_raw"],
-#             ["data/universal/en/En.u1.train", "data/universal/en_train_raw"],
-#             ["data/universal/en/En.u1.test", "data/universal/en_test_raw"]]
+if __name__ == "__main__":
+    path_ = [["/home/gpm/projects/CrossDomain-ConstituencyParsing-Origin/data/origin/WSJ/dev.txt", "data/en_dev_binary.txt"],
+            # ["data/universal/en/En.u1.train", "data/universal/en_train_raw"],
+            # ["data/universal/en/En.u1.test", "data/universal/en_test_raw"]
+            ]
     
-#     for p_in, p_out in path_:
-#         with open(p_out, 'w', encoding="utf-8") as W:
-#             tree_list = load_treebank(p_in, binarize=False, max_snt_len=1000)
-#             for tree in tree_list:
-#                 W.write(' '.join(list(tree.leaves())) + '\n')
+    for p_in, p_out in path_:
+        with open(p_out, 'w', encoding="utf-8") as W:
+            tree_list = load_treebank(p_in, sort=False, binarize=True, del_top=False)
+            for tree in tree_list:
+                W.write(tree.linearize() + '\n')

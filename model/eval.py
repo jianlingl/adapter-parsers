@@ -51,12 +51,13 @@ class Metric():
         return "R %.2f P %.2f F %.2f gold-correct-pred %d-%d-%d" % (*self.score, self.gold_span_total, self.span_correct,self.pred_span_total)
 
 
-def eval_ups_lps(gold_trees: List[Tree], pred_trees: List[Tree], del_PUNCT=True, punct_tag="PUNCT", label_scores=False, label_set=[], len_scores=False, threshold=2, max_span_len=20):
-    g_trees = tree_del_PUNCT(gold_trees, punct_tag, del_PUNCT=del_PUNCT)
-    p_trees = tree_del_PUNCT(pred_trees, punct_tag, del_PUNCT=del_PUNCT)
+def eval_ups_lps(gold_trees: List[Tree], pred_trees: List[Tree], del_PUNCT=True, punct_tag=["PUNCT"], label_scores=False, label_set=[], len_scores=False, threshold=2, max_span_len=20):
+    # g_trees = tree_del_PUNCT(gold_trees, punct_tag, del_PUNCT=del_PUNCT)
+    # p_trees = tree_del_PUNCT(pred_trees, punct_tag, del_PUNCT=del_PUNCT)
+    g_trees, p_trees = pair_tree_del_PUNCT(gold_trees, pred_trees, punct_tag, del_PUNCT=del_PUNCT)
 
     g_span_triples, p_span_triples = debinarize_and_get_span_triples(g_trees), debinarize_and_get_span_triples(p_trees)
-    
+
     unlabel_span_correct, label_span_correct, gold_span_total, pred_span_total = statistic_compute(g_span_triples, p_span_triples, len_set=None, label=None)
 
     score_lps = Metric(label_span_correct, gold_span_total, pred_span_total)
@@ -151,7 +152,7 @@ def debinarize_and_get_span_triples(trees: List[Tree], debinarize=True):
     span_triples_list = []
     for tree in trees:
         if debinarize:
-            tree.debinarization()
+            tree.debinarize()
         span_triples_list.append(list(tree.get_labeled_spans()))
     return span_triples_list
 
@@ -177,6 +178,11 @@ def evalb(evalb_dir, gold_trees, predicted_trees):
     gold_path = os.path.join(temp_dir.name, "gold.txt")
     predicted_path = os.path.join(temp_dir.name, "predicted.txt")
     output_path = os.path.join(temp_dir.name, "output.txt")
+
+    # temp_dir = "/home/ljl/0_max_margin/log/test_log/test_example_results/evalb-zh"
+    # gold_path = os.path.join(temp_dir, "gold.txt")
+    # predicted_path = os.path.join(temp_dir, "predicted.txt")
+    # output_path = os.path.join(temp_dir, "output.txt")
 
 
     write_tree(gold_trees, gold_path)
@@ -222,79 +228,63 @@ def evalb(evalb_dir, gold_trees, predicted_trees):
         print("Gold path: {}".format(gold_path))
         print("Predicted path: {}".format(predicted_path))
         print("Output path: {}".format(output_path))
-    
-    
+
     print("fscore {} ".format(fscore)) 
     return fscore
 
 
-def re_del_PUNCT(linear_tree, punct="PUNCT"):
-    del_punct0 = re.sub(r' \(PUNCT [^\)]*?\)', '', linear_tree, 0)  # 删除所有的PUNCT叶子节点
-    del_punct1 = re.sub(r' \(\. [^\)]*?\)', '', del_punct0, 0)  # 删除所有的.叶子节点
-    bracket_line = del_punct1
-
-    # 循环删除所有的空节点， 空节点的标签得所有情况
-    assert bracket_line.count('(') == bracket_line.count(')'), " \( do not match \)"
-    def loop_del(bracket_line):
-        if bracket_line.count('(') > 3:
-            bracket_line = re.sub(r' \([\*\w_]+ \([\*\w_]+ \([\*\w_]+ \([\*\w_]+\)\)\)\)', '', bracket_line, 0)
-            bracket_line = re.sub(r' \([\*\w_]+ \([\*\w_]+ \([\*\w_]+\)\)\)', '', bracket_line, 0)
-            bracket_line = re.sub(r' \([\*\w_]+ \([\*\w_]+\)\)', '', bracket_line, 0)
-            bracket_line = re.sub(r' \([\*\w_]+\)', '', bracket_line, 0)
-        
-        if bracket_line.count('(') == 3:  # '(TOP (S (NP)))' > '(TOP (S (PUNCT .)))'
-            bracket_line = re.sub(r' \([\*\w_]+\)', ' (' + punct + ' .)', bracket_line, 0)
-
-        if bracket_line.count('(') == 2:  # '(TOP (S))' > '(TOP (S (PUNCT .)))'
-            bracket_line = re.sub(r'\([\*\w_]+\)', '(S (' + punct +' .))', bracket_line, 0)
-
-        if bracket_line.count('(') == 1:  # '(TOP)' > '(TOP (S (PUNCT .)))'
-            bracket_line = '(TOP (S (' + punct + ' .)))'
-        return bracket_line
-    
-    bracket_line = loop_del(bracket_line)
-    while len(re.findall(r'\([\*\w_]+\)', bracket_line)) != 0 or len(re.findall(r'\([\*\w_]+ \)', bracket_line)) != 0:
-        bracket_line = loop_del(bracket_line)
-
-    assert len(re.findall(r'\([\*\w_]+\)', bracket_line)) == 0 and len(re.findall(r'\([\*\w_]+ \)', bracket_line)) == 0, 're空标签没有删干净'
-    assert bracket_line.count('(') == bracket_line.count(')')
-
-    return bracket_line
-
-
-def tree_del_PUNCT(trees: List[Tree], punct_tag, del_PUNCT=True):
+def tree_del_PUNCT(trees: List[Tree], punct_tags: List[str], del_PUNCT=True):
     if del_PUNCT:
         trees_no_punct = []
         for t in trees:
             # # del on the tree
-            tree = load_tree_from_str(t.linearize(), top_exist=False)
-            tree.del_PUNCT(punct_tag)
-            tree = load_tree_from_str(tree.linearize(), top_exist=False)
+            tree = load_tree_from_str(t.linearize(), del_top=False)
+            tree.del_PUNCT(punct_tags)
+            tree = load_tree_from_str(tree.linearize(), del_top=False)
             trees_no_punct.append(tree)
-            # # re to del the PUNCT
-            # linear_tree = tree.linearize()
-            # bracket_line = re_del_PUNCT(linear_tree)
-            # tree = load_tree_from_str(bracket_line, top_exist=False)
-            # trees_no_punct.append(tree)
         return trees_no_punct
     else:
         return trees
 
+def pair_tree_del_PUNCT(gold_trees: List[Tree], pred_trees: List[Tree], punct_tags: List[str], del_PUNCT=True):
+    if del_PUNCT:
+        gold_trees_no_punct, pred_trees_no_punct = [], []
+        for g, p in zip(gold_trees, pred_trees):
+            # # del on the tree
+            gold_tree = load_tree_from_str(g.linearize(), del_top=False)
+            pred_tree = load_tree_from_str(p.linearize(), del_top=False)
+
+            gold_tree.del_PUNCT(punct_tags)
+            pred_tree.del_PUNCT(punct_tags)
+
+            try:
+                gold_tree = load_tree_from_str(gold_tree.linearize(), del_top=False)
+                gold_trees_no_punct.append(gold_tree)
+                pred_tree = load_tree_from_str(pred_tree.linearize(), del_top=False)
+                pred_trees_no_punct.append(pred_tree)
+            except:
+                pass
+
+        return gold_trees_no_punct, pred_trees_no_punct
+    else:
+        return gold_trees, pred_trees
+
 
 def statistic_label_proportions_4testset(test_treebank_path):
-    test_bank = load_treebank(test_treebank_path, binarize=False)
-    test_trees = tree_del_PUNCT(test_bank, punct_tag="PUNCT",del_PUNCT=True)
+    test_bank = load_treebank(test_treebank_path, sort=False, binarize=False, prob_join_label=False)
+    test_trees = tree_del_PUNCT(test_bank, punct_tags=["PUNCT"],del_PUNCT=True)
     span_triples_list = debinarize_and_get_span_triples(test_trees, debinarize=False)
     label_num_dict = {}
-    for _, _, ll in span_triples_list:
-        label_num_dict[ll] = label_num_dict.get(label, 0) + 1
+    for snt_span in span_triples_list:
+        for _, _, ll in snt_span:
+            label_num_dict[ll] = label_num_dict.get(ll, 0) + 1
     
     labels_count = sum(label_num_dict.values())
-    assert labels_count == len(span_triples_list)
+    # assert labels_count == len(span_triples_list)
 
     for label, count in label_num_dict.items():
         label_num_dict[label] = round(count/labels_count,3)
-    
+    label_num_dict = sorted(label_num_dict.items(), key=lambda item: item[1], reverse=True)
     return label_num_dict
 
 
@@ -333,5 +323,14 @@ def toks_count_statistic(treebank: List[Tree]):
 
 
 if __name__ == "__main__":
-    treebank = load_treebank("data/universal/fr/Fr.u1.train", binarize=False)
-    sent_len_statistic(treebank)
+    # treebank = load_treebank("data/universal/fr/Fr.u1.train", sort=False, binarize=False, prob_join_label=False)
+    # sent_len_statistic(treebank)
+
+    # ground = load_treebank("data/universal/zh_from_groundtruth24", sort=False, binarize=True)
+    # predicted = load_treebank("data/universal/zh_from_chatGPT", sort=False, binarize=True)
+    # fscore = evalb("/home/ljl/0_max_margin/EVALB/", ground, predicted)
+    folder = '/home/ljl/parse_use_GPT/test5/'
+    for path in os.listdir(folder):
+        label_statis = statistic_label_proportions_4testset(folder+path)
+        print(path)
+        print(label_statis)

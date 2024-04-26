@@ -161,28 +161,31 @@ class encoderStackLayer(nn.Module):
 
 
 class ConcatTag(nn.Module):
-    def __init__(self, num_tag, d_tag):
+    def __init__(self, num_tag, d_tag, d_word):
         super().__init__()
         self.repre = nn.Embedding(num_embeddings=num_tag, embedding_dim=d_tag, padding_idx=0)
-        # nn.init.normal_(self.repre.weight, 0., 0.1)
-
+        nn.init.normal_(self.repre.weight)
+        # self.norm = nn.LayerNorm(d_word)
 
     def forward(self, x, tags: Optional[torch.tensor]=None):
-        x_tags = torch.cat((x, self.repre(tags)), dim=-1)
-        return x_tags
+        out = torch.cat((x, self.repre(tags)), dim=-1)
+        # out = self.norm(out)
+        return out
 
 
 class ConcatPosition(nn.Module):
-    def __init__(self, num_position, d_position) -> None:
+    def __init__(self, num_position, d_model) -> None:
         super().__init__()
-        self.position_table = nn.Parameter(torch.FloatTensor(num_position + 2, d_position))
-        nn.init.normal_(self.position_table, 0., 0.1)
-    
+        self.position_table = nn.Parameter(torch.FloatTensor(510 + 2, d_model // 2))
+        nn.init.normal_(self.position_table)
+        self.norm = nn.LayerNorm(d_model)
+
     def forward(self, x):
-        position = self.position_table[None, :x.size()[1], :]
-        position = position.expand(x.size()[0], -1, -1)
-        x_positions = torch.cat((x, position), dim=-1)
-        return x_positions
+        position = self.position_table[None, :x.shape[1], :]
+        x, position = torch.broadcast_tensors(x, position)
+        out = torch.cat([x, position], dim=-1)
+        out = self.norm(out)
+        return out
 
 
 # class MultiHeadAttention(nn.Module):

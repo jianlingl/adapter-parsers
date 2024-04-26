@@ -1,14 +1,9 @@
 #!/bin/bash
-eval "$(conda shell.bash hook)"
-conda activate parserL
+   # --test-path "data/universal/en.test" \
 
-nohup python main.py test \
+nohup /home/ljl/.conda/envs/parserL/bin/python main.py test \
    --device 1 \
-   --test-path "data/universal/en/En.u1.test" \
-   --model-path "log/models/en_optimizerAda_cat_span_Tag_Position_fine_tune_partitioned_transformer1.pt" > log/test_log/en_optimizerAda_cat_span_Tag_Position_fine_tune_partitioned_transformer1.testlog 2>&1 &
-sleep 5
+   --model-path "log/saved_parsers/en_our.pt" \
+   --test-path "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/before/en_test.txt" \
+   --cross-test --cross-folder "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/before/" > log/test/our-en-cross.test.log 2>&1 &
 
-nohup python main.py test \
-   --device 1 \
-   --test-path "data/universal/zh/Zh.u1.test" \
-   --model-path "log/models/zh_optimizerAda_cat_span_Tag_Position_fine_tune_partitioned_transformer1.pt" > log/test_log/zh_optimizerAda_cat_span_Tag_Position_fine_tune_partitioned_transformer1.testlog 2>&1 &

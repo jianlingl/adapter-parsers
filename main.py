@@ -13,9 +13,9 @@ from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau
 from model.eval import evalb, eval_ups_lps, FScore
 
-# from config import Hparam
-from config_partitioned_transformer import Hparam
+from config import Hparam
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 
 def get_para_amount(trainable_parameters):
@@ -68,9 +68,10 @@ def run_evaluate(parser: Parser, treebank: List[Tree], evalb_dir: str, isTest: b
     dev_fscore = evalb(evalb_dir, treebank, pred_treebank)
     
     if isTest:
-        label_set = set('::'.join(list(parser.hparam.label_vocab.keys())).split("::"))
-        label_set.remove("*")
-        _, score_lps = eval_ups_lps(treebank, pred_treebank, label_scores=True, label_set=label_set, len_scores=True)
+        # label_set = set('::'.join(list(parser.hparam.label_vocab.keys())).split("::"))
+        # label_set.remove("*")
+        # _, score_lps = eval_ups_lps(treebank, pred_treebank, label_scores=True, label_set=label_set, len_scores=True)
+        _, score_lps = eval_ups_lps(treebank, pred_treebank)
     else:
         _, score_lps = eval_ups_lps(treebank, pred_treebank)
 
@@ -78,8 +79,7 @@ def run_evaluate(parser: Parser, treebank: List[Tree], evalb_dir: str, isTest: b
     return score_lps[2]  # our Fscore 
 
 
-def save_model(parser: Parser, hparam: Hparam):
-    path = hparam.model_path_base + ".pt"
+def save_model(parser: Parser, hparam: Hparam, path):
     if os.path.exists(path):
         print("Removing previous model file {}...".format(path))
         os.remove(path)
@@ -87,23 +87,28 @@ def save_model(parser: Parser, hparam: Hparam):
     torch.save({"hparam": hparam.__dict__, "state_dict": parser.state_dict()}, path)
 
 
-def run_train(hparam: Hparam):
-    np.random.seed(hparam.numpy_seed)
-    torch.manual_seed(hparam.numpy_seed)
-    torch.cuda.manual_seed_all(hparam.numpy_seed)
-    random.seed(hparam.numpy_seed)
+def run_train(args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+    hparam = Hparam(args)
+    np.random.seed(hparam.seed)
+    torch.manual_seed(hparam.seed)
+    torch.cuda.manual_seed_all(hparam.seed)
+    random.seed(hparam.seed)
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+    torch.set_num_threads(4)
+    print(hparam.__dict__, flush=True)
 
-    print(hparam.__dict__)
+    tokenizer = AutoTokenizer.from_pretrained(hparam.plm)
+    too_long = lambda snt: len(tokenizer.tokenize(snt)) >= 512
+    train_bank = load_treebank(args.train_path, too_long=too_long, del_top=True)
+    dev_bank = load_treebank(args.dev_path, too_long=too_long, del_top=True)
+    test_bank = load_treebank(args.test_path, too_long=too_long, del_top=True)
 
-    train_bank = load_treebank(hparam.train_path, max_snt_len=hparam.max_snt_len, top_exist=True)
-    dev_bank = load_treebank(hparam.dev_path, max_snt_len=hparam.max_snt_len, top_exist=True)
-    test_bank = load_treebank(hparam.test_path, max_snt_len=hparam.max_snt_len, top_exist=True)
-
-    label_vocab = build_label_vocab(train_bank)
+    label_vocab = build_label_vocab(train_bank+dev_bank+test_bank)
     print('---------'*2, 'label_vocab', '---------'*2)
     print(label_vocab)
 
-    tag_vocab = build_tag_vocab(train_bank)
+    tag_vocab = build_tag_vocab(train_bank+dev_bank+test_bank)
     print('---------'*2, 'tag_vocab', '---------'*2)
     print(tag_vocab)
 
@@ -111,9 +116,9 @@ def run_train(hparam: Hparam):
     hparam.tag_vocab = tag_vocab
 
     # 初始化模型
-    print('Initializing model')
-    parser = Parser(hparam=hparam, cuda_device=hparam.device)
-    parser.to(hparam.device)
+    print('Initializing model', flush=True)
+    parser = Parser(hparam=hparam)
+    parser.to('cuda')
 
     # 初始化数据加载
     data_loader = torch.utils.data.DataLoader(
@@ -126,7 +131,6 @@ def run_train(hparam: Hparam):
     )
 
     # 初始化优化器
-
     trainable_parameters = [param for param in parser.parameters() if param.requires_grad]
     get_para_amount(trainable_parameters)
     optimizer = torch.optim.Adam(trainable_parameters, lr=hparam.learning_rate, betas=(0.9, 0.98), eps=1e-9)
@@ -138,16 +142,16 @@ def run_train(hparam: Hparam):
     grad_clip_threshold = (np.inf if hparam.clip_grad_norm == 0 else hparam.clip_grad_norm)    
 
     # 训练
-    print("Training...")
+    print("Training...", flush=True)
     check_step = len(train_bank) // (hparam.checks_per_epoch*hparam.batch_size)
     best_dev_fscore, best_test_fscore = -np.inf, -np.inf
     step, batch_loss_value, patience, grad_norm = 0, 0.0, 0, 0.0
     start_time = time.time()
     accm_steps = int(hparam.big_batch_size / hparam.batch_size)
 
+    optimizer.zero_grad()
     for epoch in range(hparam.max_epoch):
         epoch_start_time = time.time()
-        optimizer.zero_grad()
 
         for batch_count, batch in enumerate(data_loader):
             step += 1
@@ -177,45 +181,57 @@ def run_train(hparam: Hparam):
             if step % check_step == 0:
                 print("==========================dev set=========================")
                 f_score = run_evaluate(parser, dev_bank, hparam.evalb_dir)
-                print("\n")
                 print("==========================test set=========================")
                 test_f_score = run_evaluate(parser, test_bank, hparam.evalb_dir, isTest=True)
+                print("===========================================================")
+
                 patience += 1
                 if not math.isnan(f_score) and f_score > best_dev_fscore:
                     best_dev_fscore, best_test_fscore = f_score, test_f_score
-                    save_model(parser, hparam)
+                    save_model(parser, hparam, args.model_path_base)
                     print("==========================saving model=========================")
                     patience = 0
                 print(f"best f score: {best_dev_fscore}, best test f score: {best_test_fscore}")
 
-        # early stop
+
         if patience > hparam.early_stop_patience:
             print("Terminating due to lack of improvement in dev fscore.")
             break
 
-    
+
 def run_test(args):
-    test_bank = load_treebank(args.test_path, max_snt_len=args.max_snt_len, top_exist=True)
-    parser = Parser.from_trained(args.model_path, int(args.device))
-    label_set = set('::'.join(list(parser.hparam.label_vocab.keys())).split("::"))
-    label_set.remove("*")
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+    test_bank = load_treebank(args.test_path, sort=False, binarize=True, del_top=True)
+    parser = Parser.from_trained(args.model_path)
+    print(parser.hparam.__dict__)
+    label_set = {'NP', 'VP', 'AJP', 'AVP', 'PP', 'S','CONJP', 'COP', 'X'}
     test_pred = parser.parse(test_bank)
     fscore = evalb(args.evalb_dir, test_bank, test_pred)
-    # fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred, label_scores=True ,label_set=label_set, len_scores=True)
     fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
+    if args.cross_test:
+        cross_folder = args.cross_folder
+        for lan in ['en', 'de', 'fr', 'he', 'hu', 'ko', 'ja', 'sv', 'zh', 'akk', 'kk', 'kmr', 'mr', 'sa', 'ta', 'te', 'cy', 'yo']:
+            path = os.path.join(cross_folder, lan + '_test.txt')
+            print('---------'*2, 'cross_test', '---------'*2)
+            print(path)
+            test_bank = load_treebank(path, sort=False, binarize=True, del_top=True)
+            test_pred = parser.parse(test_bank)
+            fscore = evalb(args.evalb_dir, test_bank, test_pred)
+            fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
 
-        
+
 def run_pred(args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+    # pred_bank = load_raw_snts()
     pass
-
 
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
 
     subparser = subparsers.add_parser("train")
-    subparser.set_defaults(callback=lambda args: run_train(Hparam(args)))
-    subparser.add_argument("--numpy-seed", type=int)
+    subparser.set_defaults(callback=run_train)
+    subparser.add_argument("--seed", type=int)
     subparser.add_argument("--device", default='0')
     subparser.add_argument("--train-path", default="")
     subparser.add_argument("--dev-path", default="")
@@ -224,11 +240,13 @@ def main():
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
-    subparser.add_argument("--device", default='0')
+    subparser.add_argument("--device", default="0")
     subparser.add_argument("--model-path", required=True)
     subparser.add_argument("--test-path", default="")
     subparser.add_argument("--evalb-dir", default="EVALB")
-    subparser.add_argument("--max-snt-len", default=160)
+    subparser.add_argument("--max-snt-len", default=1000)
+    subparser.add_argument("--cross-test", default=False, action="store_true")
+    subparser.add_argument("--cross-folder", default="")
 
     subparser = subparsers.add_parser("pred")
     subparser.set_defaults(callback=run_pred)
@@ -242,10 +260,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-        
-
-
