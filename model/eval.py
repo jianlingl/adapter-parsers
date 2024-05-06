@@ -258,12 +258,14 @@ def pair_tree_del_PUNCT(gold_trees: List[Tree], pred_trees: List[Tree], punct_ta
             pred_tree.del_PUNCT(punct_tags)
 
             try:
+                assert list(gold_tree.leaves()) == list(pred_tree.leaves()), "the leaves of gold and pred are not equal"
                 gold_tree = load_tree_from_str(gold_tree.linearize(), del_top=False)
                 gold_trees_no_punct.append(gold_tree)
                 pred_tree = load_tree_from_str(pred_tree.linearize(), del_top=False)
                 pred_trees_no_punct.append(pred_tree)
+
             except:
-                pass
+                print("the leaves of gold and pred are not equal or load tree from str failed")
 
         return gold_trees_no_punct, pred_trees_no_punct
     else:

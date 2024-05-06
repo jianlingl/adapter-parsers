@@ -166,3 +166,6 @@ cython_debug/
 /data
 /EVALB
 bina_leaf.txt
+nohup.out
+train.sh
+train.sh

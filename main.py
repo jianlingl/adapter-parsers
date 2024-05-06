@@ -212,6 +212,7 @@ def run_test(args):
         cross_folder = args.cross_folder
         for lan in ['en', 'de', 'fr', 'he', 'hu', 'ko', 'ja', 'sv', 'zh', 'akk', 'kk', 'kmr', 'mr', 'sa', 'ta', 'te', 'cy', 'yo']:
             path = os.path.join(cross_folder, lan + '_test.txt')
+            if not os.path.exists(path): path = os.path.join(cross_folder, lan + '.test')
             print('---------'*2, 'cross_test', '---------'*2)
             print(path)
             test_bank = load_treebank(path, sort=False, binarize=True, del_top=True)

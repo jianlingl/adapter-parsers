@@ -19,11 +19,11 @@ class Hparam():
 
             # 优化器参数
             self.learning_rate = 0.00005
-            self.learning_rate_warmup_steps = 250
+            self.learning_rate_warmup_steps = 160 # decrease if the dataset is small
             self.step_decay_factor = 0.5
             self.epoch_decay_patience = 3
             self.clip_grad_norm = 1000.0
-            self.early_stop_patience = 20 
+            self.early_stop_patience = 20
 
 
             # encoder and score
