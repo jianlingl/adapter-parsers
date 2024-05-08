@@ -143,9 +143,9 @@ def run_train(args):
 
     # 训练
     print("Training...", flush=True)
-    check_step = len(train_bank) // (hparam.checks_per_epoch*hparam.batch_size)
+    check_step = len(train_bank) // (hparam.checks_per_epoch*hparam.big_batch_size)
     best_dev_fscore, best_test_fscore = -np.inf, -np.inf
-    step, batch_loss_value, patience, grad_norm = 0, 0.0, 0, 0.0
+    step, golbal_step, batch_loss_value, patience, grad_norm = 0, 0, 0.0, 0, 0.0
     start_time = time.time()
     accm_steps = int(hparam.big_batch_size / hparam.batch_size)
 
@@ -163,9 +163,6 @@ def run_train(args):
                 loss.backward()
             del loss
             
-            if step % (check_step // 3) == 0:
-                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
-
             if step % accm_steps == 0:
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     clippable_parameters, grad_clip_threshold
@@ -174,11 +171,14 @@ def run_train(args):
                 scheduler.step(metrics=best_dev_fscore)
                 optimizer.zero_grad()
 
-                # printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
-
                 batch_loss_value = 0.0
+                golbal_step += 1
+            
+            if golbal_step % (check_step // 3) == 0:
+                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
 
-            if step % check_step == 0:
+
+            if golbal_step % check_step == 0:
                 print("==========================dev set=========================")
                 f_score = run_evaluate(parser, dev_bank, hparam.evalb_dir)
                 print("==========================test set=========================")
