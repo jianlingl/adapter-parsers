@@ -145,7 +145,7 @@ def run_train(args):
     print("Training...", flush=True)
     check_step = len(train_bank) // (hparam.checks_per_epoch*hparam.big_batch_size)
     best_dev_fscore, best_test_fscore = -np.inf, -np.inf
-    step, golbal_step, batch_loss_value, patience, grad_norm = 0, 0, 0.0, 0, 0.0
+    step, batch_loss_value, patience, grad_norm = 0, 0.0, 0, 0.0
     start_time = time.time()
     accm_steps = int(hparam.big_batch_size / hparam.batch_size)
 
@@ -171,14 +171,10 @@ def run_train(args):
                 scheduler.step(metrics=best_dev_fscore)
                 optimizer.zero_grad()
 
-                batch_loss_value = 0.0
-                golbal_step += 1
-            
-            if golbal_step % (check_step // 3) == 0:
                 printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
+                batch_loss_value = 0.0
 
-
-            if golbal_step % check_step == 0:
+            if (step / accm_steps) % check_step == 0:
                 print("==========================dev set=========================")
                 f_score = run_evaluate(parser, dev_bank, hparam.evalb_dir)
                 print("==========================test set=========================")
@@ -237,6 +233,7 @@ def main():
     subparser.add_argument("--train-path", default="")
     subparser.add_argument("--dev-path", default="")
     subparser.add_argument("--test-path", default="")
+    subparser.add_argument("--pred-tag", action="store_true")
     subparser.add_argument("--model-path-base", required=True)
 
     subparser = subparsers.add_parser("test")

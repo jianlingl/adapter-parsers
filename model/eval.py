@@ -174,15 +174,21 @@ def evalb(evalb_dir, gold_trees, predicted_trees):
 
     assert len(gold_trees) == len(predicted_trees)
 
-    temp_dir = tempfile.TemporaryDirectory(prefix="evalb-")
-    gold_path = os.path.join(temp_dir.name, "gold.txt")
-    predicted_path = os.path.join(temp_dir.name, "predicted.txt")
-    output_path = os.path.join(temp_dir.name, "output.txt")
+    observe_res = True
 
-    # temp_dir = "/home/ljl/0_max_margin/log/test_log/test_example_results/evalb-zh"
-    # gold_path = os.path.join(temp_dir, "gold.txt")
-    # predicted_path = os.path.join(temp_dir, "predicted.txt")
-    # output_path = os.path.join(temp_dir, "output.txt")
+    if not observe_res:
+        temp_dir = tempfile.TemporaryDirectory(prefix="evalb-")
+        gold_path = os.path.join(temp_dir.name, "gold.txt")
+        predicted_path = os.path.join(temp_dir.name, "predicted.txt")
+        output_path = os.path.join(temp_dir.name, "output.txt")
+
+    else:
+        temp_dir = "log/evalb/"
+        if not os.path.exists(temp_dir):
+            os.mkdir(temp_dir)
+        gold_path = os.path.join(temp_dir, "gold.txt")
+        predicted_path = os.path.join(temp_dir, "predicted.txt")
+        output_path = os.path.join(temp_dir, "output.txt")
 
 
     write_tree(gold_trees, gold_path)
@@ -221,13 +227,14 @@ def evalb(evalb_dir, gold_trees, predicted_trees):
         not math.isnan(fscore.fscore) or fscore.recall == 0.0 or fscore.precision == 0.0
     )
 
-    if success:
-        temp_dir.cleanup()
-    else:
-        print("Error reading EVALB results.")
-        print("Gold path: {}".format(gold_path))
-        print("Predicted path: {}".format(predicted_path))
-        print("Output path: {}".format(output_path))
+    if not observe_res:
+        if success:
+            temp_dir.cleanup()
+        else:
+            print("Error reading EVALB results.")
+            print("Gold path: {}".format(gold_path))
+            print("Predicted path: {}".format(predicted_path))
+            print("Output path: {}".format(output_path))        
 
     print("fscore {} ".format(fscore)) 
     return fscore

@@ -75,6 +75,18 @@ class Parser(nn.Module):
             # nn.Linear(hparam.d_label_hidden, len(hparam.label_vocab)),
         )
 
+        assert not (hparam.use_tag and hparam.pred_tag), "can not be both TRUE"
+        self.pred_tag = False
+        self.score_tag = None
+        if hparam.pred_tag:
+            self.pred_tag = True
+            self.score_tag = nn.Sequential(
+                nn.Linear(hparam.d_model, hparam.d_tag_hidden),
+                nn.LayerNorm(hparam.d_tag_hidden),
+                nn.ReLU(),
+                nn.Linear(hparam.d_tag_hidden, len(hparam.tag_vocab) + 1),
+            )
+            self.tag_loss_scale = hparam.tag_loss_scale
         # todo zls 
         # self.score_label 后面加sigmoid ->稳定, logits = logits + Haming_augment必须乘个概率
 
@@ -129,6 +141,8 @@ class Parser(nn.Module):
         #     ], dim=-1,
         # )
 
+        tag_scores = self.score_tag(word_repre) if self.pred_tag else None
+        
         span_features = self.span_features(word_repre)
 
         # 给span打分
@@ -138,10 +152,10 @@ class Parser(nn.Module):
         logits_4stars = logits_4labels.new_zeros(logits_4labels.size()[:3] + (1, ))
         logits = torch.cat((logits_4stars, logits_4labels), dim=-1)
 
-        return logits
+        return logits, tag_scores
 
     def compute_loss(self, tokenized):
-        logits = self.forward(tokenized)
+        logits, tag_scores = self.forward(tokenized)
         gold_event, len_list = tokenized["gold_event"].to('cuda'), tokenized["word_attention_mask"].sum(-1).tolist()
 
         Haming_augment = 1. - gold_event
@@ -159,7 +173,16 @@ class Parser(nn.Module):
         
         loss = F.relu(pred_score - gold_score).mean()
 
-        return loss
+        if tag_scores is None:
+            return loss
+        else:
+            tag_gold = tokenized["tag_ids"].to('cuda')
+            tag_loss = self.tag_loss_scale * F.cross_entropy(
+                tag_scores.view(-1, tag_scores.size(-1)), 
+                tag_gold.view(-1), 
+                reduction='sum',
+                ignore_index=0)
+            return loss + tag_loss
 
     def span_features(self, features_out):
         # span_i_j concatination
@@ -218,12 +241,12 @@ class Parser(nn.Module):
                         batched_tokenized["tag_ids"][i, j] = self.tag_vocab[t]
 
             with torch.no_grad():
-                logits = self.forward(batched_tokenized)
+                label_logits, tag_logits = self.forward(batched_tokenized)
 
                 # TT 根节点的* 强行赋极小值
-                logits[torch.arange(logits.size(0)), 0, torch.tensor(len_list) - 1, 0] -= 1.e9
+                label_logits[torch.arange(label_logits.size(0)), 0, torch.tensor(len_list) - 1, 0] -= 1.e9
 
-                parsed_trees = self.decoder.tree_from_chart(logits, len_list, batched_words, batched_tags)
+                parsed_trees = self.decoder.tree_from_chart(label_logits, len_list, batched_words, batched_tags)
                 parsed_tree_list += parsed_trees
 
         return parsed_tree_list
@@ -246,12 +269,12 @@ class Parser(nn.Module):
                     batched_tokenized["tag_ids"][i, j] = self.tag_vocab[t]
 
             with torch.no_grad():
-                logits = self.forward(batched_tokenized)
+                label_logits, tag_logits = self.forward(batched_tokenized)
                 # TT 根节点的* 强行赋极小值
                 # logits[torch.arange(logits.size(0)), 0, torch.tensor(len_list) - 1, 0] -= 1.e9
 
-                parserd_tree = self.decoder.tree_from_chart(logits, len_list, batched_words, batched_tags)
-                logits_list += logits.tolist()
+                parserd_tree = self.decoder.tree_from_chart(label_logits, len_list, batched_words, batched_tags)
+                logits_list += label_logits.tolist()
                 parserd_tree_list += parserd_tree
 
         return parserd_tree_list, logits_list

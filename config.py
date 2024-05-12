@@ -22,7 +22,7 @@ class Hparam():
             self.learning_rate_warmup_steps = 160 # decrease if the dataset is small
             self.step_decay_factor = 0.5
             self.epoch_decay_patience = 3
-            self.clip_grad_norm = 1000.0
+            self.clip_grad_norm = 10000.0
             self.early_stop_patience = 20
 
 
@@ -48,6 +48,9 @@ class Hparam():
             self.residual_dropout = 0.2
             self.attention_dropout = 0.2
 
+            self.pred_tag = True
+            self.d_tag_hidden = 256
+            self.tag_loss_scale = 1.0
             self.d_label_hidden = 256
 
             # dev test pred

@@ -4,15 +4,23 @@
     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: Module",
+            "name": "eval",
             "type": "python",
             "request": "launch",
             "module": "model.eval",
             "justMyCode": false,
             "cwd": "${workspaceFolder}"
         },
-
+        {
+            "name": "module",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}"
+        },
         {
             "name": "test",
             "type": "python",
@@ -22,9 +30,9 @@
             "justMyCode": false,
             "args": [
                 "test",
-                 "--device", "0",
-                 "--test-path", "data/universal/en/En.u1.test",
-                 "--model-path", "log/models/xxx.pt"
+                 "--device", "6",
+                 "--test-path", "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/most_simp_no_mul-labels/zh.test",
+                 "--model-path", "log/saved_parsers/most_simp_no_mullabel/zh_our.pt",
             ]
         },
         {
@@ -39,21 +47,15 @@
                 "--seed",
                 "8888",
                 "--device",
-                "4",
+                "5",
                 "--model-path-base",
-                "log/saved_parsers/000",
+                "log/saved_parsers/000.pt",
                 "--train-path",
-                // "/home/ljl/UD2UC_new/data/EWT_const_train.txt",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/reconstruct_terrible/en_train.txt",
-                // "data/universal/ja.train",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/most_simp/en.train",
                 "--dev-path",
-                // "/home/ljl/UD2UC_new/data/EWT_const_dev.txt",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/reconstruct_terrible/en_dev.txt",
-                // "data/universal/ja.dev",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/most_simp/en.dev",
                 "--test-path",
-                // "/home/ljl/UD2UC_new/data/EWT_const_test.txt",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/reconstruct_terrible/en_test.txt",
-                // "data/universal/ja.test",
+                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/most_simp/en.test",
             ]
         },
     ]
