@@ -11,7 +11,7 @@ class Hparam():
             # train
             self.flag_adapter = 0 # 0: no adapter, 1: adapter, 2: PGNadapter
             self.max_epoch = 80
-            self.batch_size = 1
+            self.batch_size = 4
             self.big_batch_size = 32
             self.seed = 6666 if args.seed is None else args.seed
             self.plm = 'pretrain_model/xlm-roberta-base'

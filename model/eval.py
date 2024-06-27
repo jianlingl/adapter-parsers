@@ -157,7 +157,7 @@ def debinarize_and_get_span_triples(trees: List[Tree], debinarize=True):
     return span_triples_list
 
 
-def evalb(evalb_dir, gold_trees, predicted_trees):
+def evalb(evalb_dir, gold_trees, predicted_trees, folder=None):
     assert os.path.exists(evalb_dir)
     evalb_program_path = os.path.join(evalb_dir, "evalb")
     evalb_spmrl_program_path = os.path.join(evalb_dir, "evalb_spmrl")
@@ -184,6 +184,8 @@ def evalb(evalb_dir, gold_trees, predicted_trees):
 
     else:
         temp_dir = "log/evalb/"
+        if folder is not None:
+            temp_dir += folder
         if not os.path.exists(temp_dir):
             os.mkdir(temp_dir)
         gold_path = os.path.join(temp_dir, "gold.txt")

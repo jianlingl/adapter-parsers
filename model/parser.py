@@ -119,7 +119,7 @@ class Parser(nn.Module):
         # 花式索引头词
         batch_index = torch.arange(features.size()[0]).unsqueeze(-1)
         word_repre = features[batch_index, words_index, :]
-        word_repre.masked_fill(~word_attention_mask[:, :, None], 0)
+        word_repre.masked_fill_(~word_attention_mask[:, :, None], 0)
 
         # 获取更全面词表示
         if self.use_tag:

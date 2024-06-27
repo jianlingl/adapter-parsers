@@ -29,6 +29,7 @@ def ptb_unescape(words):
         # Mid-token punctuation occurs in biomedical text
         word = word.replace("-LSB-", "[").replace("-RSB-", "]")
         word = word.replace("-LRB-", "（").replace("-RRB-", "）")
+        word = word.replace("(", "（").replace(")", "）")
         word = word.replace("-LCB-", "{").replace("-RCB-", "}")
         word = word.replace("``", '"').replace("`", "'").replace("''", '"')
         cleaned_words.append(word)

@@ -63,9 +63,9 @@ def format_elapsed(start_time):
     return elapsed_string
 
 
-def run_evaluate(parser: Parser, treebank: List[Tree], evalb_dir: str, isTest: bool=False):
+def run_evaluate(parser: Parser, treebank: List[Tree], evalb_dir: str, isTest: bool=False, folder=None):
     pred_treebank = parser.parse(treebank)
-    dev_fscore = evalb(evalb_dir, treebank, pred_treebank)
+    dev_fscore = evalb(evalb_dir, treebank, pred_treebank, folder=folder)
     
     if isTest:
         # label_set = set('::'.join(list(parser.hparam.label_vocab.keys())).split("::"))
@@ -178,7 +178,8 @@ def run_train(args):
                 print("==========================dev set=========================")
                 f_score = run_evaluate(parser, dev_bank, hparam.evalb_dir)
                 print("==========================test set=========================")
-                test_f_score = run_evaluate(parser, test_bank, hparam.evalb_dir, isTest=True)
+                folder = args.model_path_base.split('/')[-1].replace('.pt', '')
+                test_f_score = run_evaluate(parser, test_bank, hparam.evalb_dir, isTest=True, folder=folder)
                 print("===========================================================")
 
                 patience += 1

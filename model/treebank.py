@@ -4,17 +4,14 @@ from typing import List
 
 
 class Tree:
-    def __init__(self, label, children, left, right, prob_join_label=False) -> None:
-        if prob_join_label:
-            prob, label = label.split('|||')
-            self.prob, self.label = float(prob), label
-        else:
-            self.prob, self.label = None, label
+    def __init__(self, label, children, left, right) -> None:
+        self.label = label
         self.word = None if not isinstance(children, str) else children
         self.children = children if not isinstance(children, str) else None
         self.left = left
         self.right = right
         self.is_leaf = False if self.word is None else True
+        self.head = None
 
     def leaves(self):
         if self.is_leaf:
@@ -87,7 +84,6 @@ class Tree:
                 res += child.span_labels()
         return res
 
-
     def get_labeled_spans(self, strip_top=True):
         if self.is_leaf:
             res = []
@@ -100,17 +96,6 @@ class Tree:
             for child in self.children:
                 res += child.get_labeled_spans(strip_top)
         return res
-
-    def cal_span_prob(self):
-        if not self.is_leaf:
-            for child in self.children:
-                child.cal_span_prob()
-
-            prob = 1.0
-            for child in self.children:
-                assert child.prob is not None and child.prob != -1, "the child prob has not been updated"
-                prob *= child.prob
-            self.prob = math.pow(prob, 1/len(self.children))
 
     def linearize(self):
         if self.is_leaf:
