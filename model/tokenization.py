@@ -36,15 +36,13 @@ from transformers import XLMRobertaTokenizer, AutoTokenizer
 
 
 class Retokenizer():
-
     def __init__(self, pretrained_model_name_or_path):
-        if 'bert-base-cased' in pretrained_model_name_or_path:
-            self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+        if 'bert' in pretrained_model_name_or_path:
             self.unk_id = self.tokenizer.unk_token_id
             self.bos_id = self.tokenizer.cls_token_id
             self.eos_id = self.tokenizer.sep_token_id
-        else:
-            self.tokenizer = XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path)
+        else: # for plm: xlmr and bloom
             self.unk_id = self.tokenizer.unk_token_id
             self.bos_id = self.tokenizer.bos_token_id
             self.eos_id = self.tokenizer.eos_token_id

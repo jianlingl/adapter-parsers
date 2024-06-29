@@ -7,7 +7,7 @@ import math
 import random
 import numpy as np
 from typing import List
-
+os.environ["CUDA_VISIBLE_DEVICES"] = '4'
 from model.treebank import load_treebank, build_label_vocab, build_tag_vocab, Tree
 from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau
@@ -33,22 +33,24 @@ def get_para_amount(trainable_parameters):
     print(para_count)
 
 
-def printLog(epoch, batch_count, treebank_len, batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time):
+def printLog(epoch, batch_count, treebank_len, batch_size, batch_loss_value, grad_norm, cur_lr, epoch_start_time, start_time):
     print(
         "epoch {:,} "
         "batch {:,}/{:,} "
         "batch-loss {:.4f} "
         "grad-norm {:.4f} "
+        "cur-lr {:.8f} "
         "epoch-elapsed {} "
         "total-elapsed {}".format(
-                                epoch,
-                                batch_count,
-                                int(np.ceil(treebank_len / batch_size)),
-                                batch_loss_value,
-                                grad_norm,
-                                format_elapsed(epoch_start_time),
-                                format_elapsed(start_time),
-                                )   
+            epoch,
+            batch_count,
+            int(np.ceil(treebank_len / batch_size)),
+            batch_loss_value,
+            grad_norm,
+            cur_lr,
+            format_elapsed(epoch_start_time),
+            format_elapsed(start_time),
+            )   
         )
 
 
@@ -96,13 +98,17 @@ def run_train(args):
     random.seed(hparam.seed)
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     torch.set_num_threads(4)
-    print(hparam.__dict__, flush=True)
 
-    tokenizer = AutoTokenizer.from_pretrained(hparam.plm)
+    tokenizer = AutoTokenizer.from_pretrained(hparam.LMpara.plm)
     too_long = lambda snt: len(tokenizer.tokenize(snt)) >= 512
-    train_bank = load_treebank(args.train_path, too_long=too_long, del_top=True)
-    dev_bank = load_treebank(args.dev_path, too_long=too_long, del_top=True)
-    test_bank = load_treebank(args.test_path, too_long=too_long, del_top=True)
+    train_bank = load_treebank(args.train_path, too_long=too_long, del_top=True, add_lang=True)
+    dev_bank = load_treebank(args.dev_path, too_long=too_long, del_top=True, add_lang=True)
+    test_bank = load_treebank(args.test_path, too_long=too_long, del_top=True, add_lang=True)
+
+    steps_per_epoch = len(train_bank) // hparam.big_batch_size
+    hparam.learning_rate_warmup_steps = steps_per_epoch * 2
+    print(hparam.LMpara.__dict__, flush=True)
+    print(hparam.__dict__, flush=True)
 
     label_vocab = build_label_vocab(train_bank+dev_bank+test_bank)
     print('---------'*2, 'label_vocab', '---------'*2)
@@ -136,14 +142,14 @@ def run_train(args):
     optimizer = torch.optim.Adam(trainable_parameters, lr=hparam.learning_rate, betas=(0.9, 0.98), eps=1e-9)
     scheduler = WarmupThenReduceLROnPlateau(
         optimizer, hparam.learning_rate_warmup_steps, mode="max", factor=hparam.step_decay_factor,
-        patience=hparam.epoch_decay_patience*(len(train_bank)//hparam.big_batch_size), verbose=True,
+        patience=hparam.epoch_decay_patience*(steps_per_epoch), verbose=True,
     )
     clippable_parameters = trainable_parameters
     grad_clip_threshold = (np.inf if hparam.clip_grad_norm == 0 else hparam.clip_grad_norm)    
 
     # 训练
     print("Training...", flush=True)
-    check_step = len(train_bank) // (hparam.checks_per_epoch*hparam.big_batch_size)
+    check_step = steps_per_epoch // hparam.checks_per_epoch
     best_dev_fscore, best_test_fscore = -np.inf, -np.inf
     step, batch_loss_value, patience, grad_norm = 0, 0.0, 0, 0.0
     start_time = time.time()
@@ -170,8 +176,9 @@ def run_train(args):
                 optimizer.step()
                 scheduler.step(metrics=best_dev_fscore)
                 optimizer.zero_grad()
-
-                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, epoch_start_time, start_time)
+                
+                cur_lr = optimizer.param_groups[0]['lr']
+                printLog(epoch, batch_count, len(train_bank), hparam.batch_size, batch_loss_value, grad_norm, cur_lr, epoch_start_time, start_time)
                 batch_loss_value = 0.0
 
             if (step / accm_steps) % check_step == 0:
@@ -198,7 +205,7 @@ def run_train(args):
 
 def run_test(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-    test_bank = load_treebank(args.test_path, sort=False, binarize=True, del_top=True)
+    test_bank = load_treebank(args.test_path, sort=False, binarize=True, del_top=True, add_lang=True)
     parser = Parser.from_trained(args.model_path)
     print(parser.hparam.__dict__)
     label_set = {'NP', 'VP', 'AJP', 'AVP', 'PP', 'S','CONJP', 'COP', 'X'}
@@ -212,7 +219,7 @@ def run_test(args):
             if not os.path.exists(path): path = os.path.join(cross_folder, lan + '.test')
             print('---------'*2, 'cross_test', '---------'*2)
             print(path)
-            test_bank = load_treebank(path, sort=False, binarize=True, del_top=True)
+            test_bank = load_treebank(path, sort=False, binarize=True, del_top=True, add_lang=True)
             test_pred = parser.parse(test_bank)
             fscore = evalb(args.evalb_dir, test_bank, test_pred)
             fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
@@ -222,6 +229,7 @@ def run_pred(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     # pred_bank = load_raw_snts()
     pass
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -256,6 +264,7 @@ def main():
 
     args = parser.parse_args()
     args.callback(args)
+
 
 if __name__ == "__main__":
     main()

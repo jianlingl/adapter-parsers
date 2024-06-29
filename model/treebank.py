@@ -1,10 +1,12 @@
-import math
+import sys
+sys.path.append('..')
+from config import iso_code
 from model.data_unscape import ptb_unescape
 from typing import List
 
 
 class Tree:
-    def __init__(self, label, children, left, right) -> None:
+    def __init__(self, label, children, left, right, lang=None) -> None:
         self.label = label
         self.word = None if not isinstance(children, str) else children
         self.children = children if not isinstance(children, str) else None
@@ -12,6 +14,7 @@ class Tree:
         self.right = right
         self.is_leaf = False if self.word is None else True
         self.head = None
+        self.lang = lang
 
     def leaves(self):
         if self.is_leaf:
@@ -104,6 +107,9 @@ class Tree:
             text = ' '.join([child.linearize() for child in self.children])
         return '(%s %s)' % (self.label, text)
 
+    def add_lang(self, lang: str):
+        self.lang = lang
+
 
 def build_label_vocab(trees: List[Tree]):
     labels = []
@@ -114,14 +120,12 @@ def build_label_vocab(trees: List[Tree]):
     label_set = ['*'] + label_set
     return {label: i for i, label in enumerate(label_set)}
 
-
 def build_tag_vocab(trees: List[Tree]):
     tags = []
     for tree in trees:
         tags += list(tree.pos())
     tag_set = [''] + sorted(set(tags))
     return {tag: i for i, tag in enumerate(tag_set)}
-
 
 def build_tree(tokens, idx, span_left_idx):
     idx += 1
@@ -153,15 +157,13 @@ def build_tree(tokens, idx, span_left_idx):
     assert tokens[idx] == ')'
     return tree, idx+1, span_right_idx
 
-
 def write_tree(tree_list: List[Tree], path):
     with open(path, 'w', encoding='utf-8') as W:
         for tree in tree_list:
             tree.debinarize()
             W.write(Tree("TOP", [tree], tree.left, tree.right).linearize() + '\n')
 
-
-def load_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool=True):
+def load_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool=True, add_lang=False):
     trees = []
     for bracket_line in open(path, 'r', encoding='utf-8'):
         t = load_tree_from_str(bracket_line, del_top=del_top)
@@ -182,8 +184,12 @@ def load_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool
         else:
             trees.append(t)
     
-    print(path)
-    print(len(trees))
+    if add_lang:
+        lang = path.split('/')[-1].split('.')[0]
+        for t in trees:
+            t.add_lang(iso_code[lang])
+
+    print(f"{len(trees)} in {path}")
     if sort:
         return sorted(trees, key=lambda x: len(list(x.leaves())))
     else:

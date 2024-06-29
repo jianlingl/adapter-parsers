@@ -5,7 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
-/model/
+
 # Distribution / packaging
 .Python
 build/
@@ -167,7 +167,7 @@ cython_debug/
 /EVALB
 bina_leaf.txt
 nohup.out
-train.sh
+test.sh
 train.sh
 all_d
 awf

@@ -11,6 +11,7 @@ from model.tokenization import Retokenizer
 from model.encoder import ConcatTag, ConcatPosition, encoderStackLayer, PartitionedTransformerEncoderLayer, FeatureDropout
 from model.decoder import ChartDecoder
 from model.treebank import Tree
+from model.llm import LLM
 from config import Hparam
 
 
@@ -19,21 +20,8 @@ class Parser(nn.Module):
         super().__init__()
         # 预训练
         self.hparam = hparam
-        self.tokenizer = Retokenizer(hparam.plm)
-
-        self.flag_adapter = hparam.flag_adapter
-
-        if self.flag_adapter == 0:
-            if 'bert-base-cased' in hparam.plm:
-                self.pretrain_model_no_adapter = AutoModel.from_pretrained(hparam.plm)
-            else:
-                self.pretrain_model_no_adapter = XLMRobertaModel.from_pretrained(hparam.plm)
-        elif self.flag_adapter == 1:
-            self.pretrain_model_use_adapter = AdapterXLMRobertaModel(hparam.plm, adapter_size=hparam.adapter_size)
-        elif self.flag_adapter == 2:
-            self.pretrain_model_PGN_adapter = PGNAdapterXLMRobertaModel(hparam.plm, lan_dim=hparam.PGN_lan_dim, adapter_size=hparam.adapter_size)
-        else:
-            assert False
+        self.tokenizer = Retokenizer(hparam.LMpara.plm)
+        self.llm = LLM(hparam.LMpara)
 
         # 词表示
         self.tag_vocab = hparam.tag_vocab
@@ -60,8 +48,6 @@ class Parser(nn.Module):
 
         self.span_linear_cat = nn.Linear(hparam.d_word*4, hparam.d_word*2, bias=True)
 
-        # self.encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(hparam.d_word, hparam.num_heads, dim_feedforward=1024, batch_first=True), 2)
-
         self.decoder = ChartDecoder(hparam.label_vocab)
 
         # 打分函数
@@ -84,7 +70,7 @@ class Parser(nn.Module):
                 nn.Linear(hparam.d_model, hparam.d_tag_hidden),
                 nn.LayerNorm(hparam.d_tag_hidden),
                 nn.ReLU(),
-                nn.Linear(hparam.d_tag_hidden, len(hparam.tag_vocab) + 1),
+                nn.Linear(hparam.d_tag_hidden, len(hparam.tag_vocab)),
             )
             self.tag_loss_scale = hparam.tag_loss_scale
         # todo zls 
@@ -102,19 +88,7 @@ class Parser(nn.Module):
         # tag_ids = torch.cat([torch.zeros(tag_ids.size()[0], 1, dtype=int).to('cuda'), tag_ids], dim=-1)
         # tag_ids = torch.cat([tag_ids, torch.zeros(tag_ids.size()[0], 1, dtype=int).to('cuda')], dim=-1)
 
-        # 预训练输出
-        # 0 no adapter 
-        # 1 use adapter 
-        # 2 PGN adapter
-        if self.flag_adapter == 0:
-            features = self.pretrain_model_no_adapter(input_ids, attention_mask).last_hidden_state
-        elif self.flag_adapter == 1:
-            features = self.pretrain_model_use_adapter(input_ids, attention_mask).last_hidden_state
-        elif self.flag_adapter == 2:
-            pgn_ids = torch.tensor([1., 0., 0.]).unsqueeze(0).expand(input_ids.size()[0], -1).to('cuda')
-            features = self.pretrain_model_PGN_adapter(pgn_ids, input_ids, attention_mask).last_hidden_state
-        else:
-            assert False
+        features = self.llm(input_ids, attention_mask, tokenized['langs'])
 
         # 花式索引头词
         batch_index = torch.arange(features.size()[0]).unsqueeze(-1)
@@ -124,7 +98,7 @@ class Parser(nn.Module):
         # 获取更全面词表示
         if self.use_tag:
             word_repre = self.concat_tag(word_repre, tag_ids)
-        word_repre = self.c_project(self.word_feature_dropout(word_repre))
+        word_repre = self.c_project(self.word_feature_dropout(word_repre).to(torch.float))
 
         if self.use_position:
             word_repre = self.concat_position(word_repre)
@@ -180,7 +154,7 @@ class Parser(nn.Module):
             tag_loss = self.tag_loss_scale * F.cross_entropy(
                 tag_scores.view(-1, tag_scores.size(-1)), 
                 tag_gold.view(-1), 
-                reduction='sum',
+                reduction='mean',
                 ignore_index=0)
             return loss + tag_loss
 
@@ -206,9 +180,10 @@ class Parser(nn.Module):
     def encode_and_collate(self, trees: List[Tree]):
         batched_words = [list(tree.leaves()) for tree in trees]
         batched_tags = [list(tree.pos()) for tree in trees]
+        batched_langs = [list(tree.lang for tree in trees)]
 
         batched_tokenized = self.tokenizer(batched_words)
-
+        batched_tokenized["langs"] = batched_langs
         batched_tokenized["tag_ids"] = torch.zeros(batched_tokenized["words_index"].size(), dtype=int)
         for i, tags in enumerate(batched_tags):
             for j, t in enumerate(tags):
@@ -230,9 +205,11 @@ class Parser(nn.Module):
             batch_end = batch_start + self.hparam.batch_size
             batched_words = all_batched_words[batch_start : batch_end]
             batched_tags = [list(tree.pos()) for tree in trees[batch_start : batch_end]]
+            batched_langs = [tree.lang for tree in trees[batch_start : batch_end]]
 
             batched_tokenized = self.tokenizer(batched_words)
             len_list = batched_tokenized["word_attention_mask"].sum(-1).tolist()
+            batched_tokenized["langs"] = batched_langs
 
             if self.use_tag:
                 batched_tokenized["tag_ids"] = torch.zeros(batched_tokenized["words_index"].size(), dtype=int)

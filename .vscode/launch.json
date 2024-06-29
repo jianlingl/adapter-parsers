@@ -51,11 +51,11 @@
                 "--model-path-base",
                 "log/saved_parsers/000.pt",
                 "--train-path",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/chatGPT_all/zh.train",
+                "data/UD2UC/en.train",
                 "--dev-path",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/chatGPT_all/zh.dev",
+                "data/UD2UC/en.dev",
                 "--test-path",
-                "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/chatGPT_all/zh.test",
+                "data/UD2UC/en.test",
             ]
         },
     ]
