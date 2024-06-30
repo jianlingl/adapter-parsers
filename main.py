@@ -7,7 +7,7 @@ import math
 import random
 import numpy as np
 from typing import List
-os.environ["CUDA_VISIBLE_DEVICES"] = '4'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '4'
 from model.treebank import load_treebank, build_label_vocab, build_tag_vocab, Tree
 from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau
@@ -101,9 +101,9 @@ def run_train(args):
 
     tokenizer = AutoTokenizer.from_pretrained(hparam.LMpara.plm)
     too_long = lambda snt: len(tokenizer.tokenize(snt)) >= 512
-    train_bank = load_treebank(args.train_path, too_long=too_long, del_top=True, add_lang=True)
-    dev_bank = load_treebank(args.dev_path, too_long=too_long, del_top=True, add_lang=True)
-    test_bank = load_treebank(args.test_path, too_long=too_long, del_top=True, add_lang=True)
+    train_bank = load_treebank(args.train_path, pattern='train', too_long=too_long, del_top=True, add_lang=True)
+    dev_bank = load_treebank(args.dev_path, pattern='dev', too_long=too_long, del_top=True, add_lang=True)
+    test_bank = load_treebank(args.test_path, pattern='test', too_long=too_long, del_top=True, add_lang=True)
 
     steps_per_epoch = len(train_bank) // hparam.big_batch_size
     hparam.learning_rate_warmup_steps = steps_per_epoch * 2
@@ -205,24 +205,25 @@ def run_train(args):
 
 def run_test(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-    test_bank = load_treebank(args.test_path, sort=False, binarize=True, del_top=True, add_lang=True)
     parser = Parser.from_trained(args.model_path)
     print(parser.hparam.__dict__)
-    label_set = {'NP', 'VP', 'AJP', 'AVP', 'PP', 'S','CONJP', 'COP', 'X'}
-    test_pred = parser.parse(test_bank)
-    fscore = evalb(args.evalb_dir, test_bank, test_pred)
-    fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
+    # label_set = {'NP', 'VP', 'AJP', 'AVP', 'PP', 'S','CONJP', 'COP', 'X'}
+
     if args.cross_test:
         cross_folder = args.cross_folder
-        for lan in ['en', 'de', 'fr', 'he', 'hu', 'ko', 'ja', 'sv', 'zh', 'akk', 'kk', 'kmr', 'mr', 'sa', 'ta', 'te', 'cy', 'yo']:
-            path = os.path.join(cross_folder, lan + '_test.txt')
-            if not os.path.exists(path): path = os.path.join(cross_folder, lan + '.test')
+        for lan in ['en', 'de', 'fr', 'he', 'ko', 'sv', 'zh', 'akk', 'kk', 'kmr', 'mr', 'sa', 'ta', 'yo']:
+            path = os.path.join(cross_folder, lan + '.test')
             print('---------'*2, 'cross_test', '---------'*2)
             print(path)
-            test_bank = load_treebank(path, sort=False, binarize=True, del_top=True, add_lang=True)
+            test_bank = load_treebank(path, pattern='test', sort=False, binarize=True, del_top=True, add_lang=True)
             test_pred = parser.parse(test_bank)
             fscore = evalb(args.evalb_dir, test_bank, test_pred)
             fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
+    else:
+        test_bank = load_treebank(args.test_path, pattern='test', sort=False, binarize=True, del_top=True, add_lang=True)
+        test_pred = parser.parse(test_bank)
+        fscore = evalb(args.evalb_dir, test_bank, test_pred)
+        fscore_lps, fscore_ups = eval_ups_lps(test_bank, test_pred)
 
 
 def run_pred(args):

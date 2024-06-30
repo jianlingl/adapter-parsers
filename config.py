@@ -26,7 +26,7 @@ class Hparam():
             # train
             self.LMpara = LLMParam()
             self.max_epoch = 80
-            self.batch_size = 32
+            self.batch_size = 8
             self.big_batch_size = 32
             self.seed = 6666 if args.seed is None else args.seed
             self.checks_per_epoch = 4
@@ -38,7 +38,7 @@ class Hparam():
             self.clip_grad_norm = 1000.0
             self.early_stop_patience = 20
             # encoder and score
-            self.d_pretrained = 768
+            self.d_pretrained = 768 if 'bloom' in self.LMpara.plm else 4096
             self.d_word = 512
             self.use_tag = False
             self.d_tag = 256
@@ -74,4 +74,4 @@ class Hparam():
             assert False, "Error in input or load hparam"
 
 
-iso_code = {'en': 'eng', 'de': 'deu', 'fr': 'fra', 'he': 'heb', 'hu': 'hun', 'ja': 'jpn', 'ko': 'kor', 'sv': 'swe', 'zh': 'zho', 'akk': 'akk', 'kk': 'kaz', 'ku': 'kmr', 'mr': 'mar', 'sa': 'san', 'ta': 'tam', 'yo': 'yor'}
+iso_code = {'en': 'eng', 'de': 'deu', 'fr': 'fra', 'he': 'heb', 'hu': 'hun', 'ja': 'jpn', 'ko': 'kor', 'sv': 'swe', 'zh': 'zho', 'akk': 'akk', 'kk': 'kaz', 'kmr': 'kmr', 'mr': 'mar', 'sa': 'san', 'ta': 'tam', 'yo': 'yor'}

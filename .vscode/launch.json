@@ -51,11 +51,11 @@
                 "--model-path-base",
                 "log/saved_parsers/000.pt",
                 "--train-path",
-                "data/UD2UC/en.train",
+                "data/UD2UC/",
                 "--dev-path",
-                "data/UD2UC/en.dev",
+                "data/UD2UC/",
                 "--test-path",
-                "data/UD2UC/en.test",
+                "data/UD2UC/",
             ]
         },
     ]

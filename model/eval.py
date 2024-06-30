@@ -6,7 +6,7 @@ import tempfile
 from typing import List, Optional, Tuple, Dict, Any
 from tqdm import tqdm
 
-from model.treebank import Tree, write_tree, load_treebank, load_tree_from_str
+from model.treebank import Tree, write_tree, load_single_treebank, load_tree_from_str
 
 
 class FScore(object):
@@ -284,7 +284,7 @@ def pair_tree_del_PUNCT(gold_trees: List[Tree], pred_trees: List[Tree], punct_ta
 
 
 def statistic_label_proportions_4testset(test_treebank_path):
-    test_bank = load_treebank(test_treebank_path, sort=False, binarize=False, prob_join_label=False)
+    test_bank = load_single_treebank(test_treebank_path, sort=False, binarize=False, prob_join_label=False)
     test_trees = tree_del_PUNCT(test_bank, punct_tags=["PUNCT"],del_PUNCT=True)
     span_triples_list = debinarize_and_get_span_triples(test_trees, debinarize=False)
     label_num_dict = {}

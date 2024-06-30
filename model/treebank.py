@@ -1,4 +1,4 @@
-import sys
+import sys, os
 sys.path.append('..')
 from config import iso_code
 from model.data_unscape import ptb_unescape
@@ -163,7 +163,7 @@ def write_tree(tree_list: List[Tree], path):
             tree.debinarize()
             W.write(Tree("TOP", [tree], tree.left, tree.right).linearize() + '\n')
 
-def load_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool=True, add_lang=False):
+def load_single_treebank(path, sort=False, binarize=True, too_long=False, del_top: bool=True, add_lang=False):
     trees = []
     for bracket_line in open(path, 'r', encoding='utf-8'):
         t = load_tree_from_str(bracket_line, del_top=del_top)
@@ -212,6 +212,27 @@ def load_tree_from_str(bracket_line: str, del_top: bool=True):
     return tree
 
 
+def load_multi_treebanks(folder, pattern, binarize=True, too_long=False, del_top: bool=True, add_lang=True):
+    assert os.path.isdir(folder) and pattern is not None, "error in data path"
+    langs = ['en', 'de', 'fr', 'he', 'ko', 'sv', 'zh', 'akk', 'kk', 'kmr', 'mr', 'sa', 'ta', 'yo']
+    paths = [os.path.join(folder, f) for f in os.listdir(folder) if pattern in f and f.split('.')[0] in langs]
+    
+    trees = []
+    for path in paths:
+        if os.path.exists(path):
+            trees += load_single_treebank(path, sort=False, binarize=binarize, too_long=too_long, del_top=del_top, add_lang=add_lang)
+    return trees
+
+
+def load_treebank(path, pattern=None, sort=False, binarize=True, too_long=False, del_top: bool=True, add_lang=False):
+    if os.path.isdir(path):
+        all_trees = load_multi_treebanks(path, pattern, binarize=binarize, too_long=too_long, del_top=del_top, add_lang=add_lang)
+        print(f"Total {len(all_trees)} {pattern} trees in {path}")
+        return all_trees
+    else:
+        return load_single_treebank(path, sort=sort, binarize=binarize, too_long=too_long, del_top=del_top, add_lang=add_lang)
+
+
 if __name__ == "__main__":
     path_ = [["/home/gpm/projects/CrossDomain-ConstituencyParsing-Origin/data/origin/WSJ/dev.txt", "data/en_dev_binary.txt"],
             # ["data/universal/en/En.u1.train", "data/universal/en_train_raw"],
@@ -220,6 +241,6 @@ if __name__ == "__main__":
     
     for p_in, p_out in path_:
         with open(p_out, 'w', encoding="utf-8") as W:
-            tree_list = load_treebank(p_in, sort=False, binarize=True, del_top=False)
+            tree_list = load_single_treebank(p_in, sort=False, binarize=True, del_top=False)
             for tree in tree_list:
                 W.write(tree.linearize() + '\n')
