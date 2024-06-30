@@ -4,8 +4,8 @@ import torch
 
 class LLMParam():
     def __init__(self) -> None:
-        self.plm = '/data/hfmodel/bert-base-multilingual-cased'
-        # self.plm = '/data/hfmodel/xlm-roberta-large'
+        # self.plm = '/data/hfmodel/bert-base-multilingual-cased'
+        self.plm = '/data/hfmodel/xlm-roberta-large'
         # self.plm = '/data/hfmodel/bloom-7b1'
         self.lm_dtype = torch.float32 if 'bloom' not in self.plm else torch.bfloat16
         self.use_adapter = False
@@ -38,7 +38,7 @@ class Hparam():
             self.clip_grad_norm = 1000.0
             self.early_stop_patience = 20
             # encoder and score
-            self.d_pretrained = 768 if 'bloom' in self.LMpara.plm else 4096
+            self.d_pretrained = 1024 if 'xlm-r' in self.LMpara.plm else (4096 if 'bloom' in self.LMpara.plm else 768)
             self.d_word = 512
             self.use_tag = False
             self.d_tag = 256
