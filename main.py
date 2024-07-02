@@ -7,7 +7,7 @@ import math
 import random
 import numpy as np
 from typing import List
-# os.environ["CUDA_VISIBLE_DEVICES"] = '4'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '5'
 from model.treebank import load_treebank, build_label_vocab, build_tag_vocab, Tree
 from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau
@@ -100,12 +100,12 @@ def run_train(args):
     torch.set_num_threads(4)
 
     tokenizer = AutoTokenizer.from_pretrained(hparam.LMpara.plm)
-    too_long = lambda snt: len(tokenizer.tokenize(snt)) >= 512
+    too_long = lambda snt: len(tokenizer.tokenize(snt)) >= 256
     train_bank = load_treebank(args.train_path, pattern='train', too_long=too_long, del_top=True, add_lang=True)
     dev_bank = load_treebank(args.dev_path, pattern='dev', too_long=too_long, del_top=True, add_lang=True)
     test_bank = load_treebank(args.test_path, pattern='test', too_long=too_long, del_top=True, add_lang=True)
 
-    steps_per_epoch = len(train_bank) // hparam.big_batch_size
+    steps_per_epoch = math.ceil(len(train_bank) / hparam.big_batch_size)
     hparam.learning_rate_warmup_steps = steps_per_epoch * 2
     print(hparam.LMpara.__dict__, flush=True)
     print(hparam.__dict__, flush=True)
@@ -149,7 +149,7 @@ def run_train(args):
 
     # 训练
     print("Training...", flush=True)
-    check_step = steps_per_epoch // hparam.checks_per_epoch
+    check_step = steps_per_epoch / hparam.checks_per_epoch
     best_dev_fscore, best_test_fscore = -np.inf, -np.inf
     step, batch_loss_value, patience, grad_norm = 0, 0.0, 0, 0.0
     start_time = time.time()

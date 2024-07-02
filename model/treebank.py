@@ -167,7 +167,9 @@ def load_single_treebank(path, sort=False, binarize=True, too_long=False, del_to
     trees = []
     for bracket_line in open(path, 'r', encoding='utf-8'):
         t = load_tree_from_str(bracket_line, del_top=del_top)
-        if too_long and too_long(' '.join(list(t.leaves()))):
+        snt = ' '.join(list(t.leaves()))
+        if too_long and too_long(snt):
+            print(f"{path} exists too long sentence: {snt}")
             continue
 
         # 二叉化

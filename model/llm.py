@@ -9,6 +9,7 @@ from lang2vec.lang2vec import get_features
 from transformers import AutoModel
 from peft import LoraConfig, TaskType, get_peft_model
 from typing import Optional
+from time import time
 
 get_trainable_parameters_size = lambda model: sum([param.numel() for _, param in model.named_parameters() if param.requires_grad])
 
@@ -123,14 +124,25 @@ class LLM(nn.Module):
     
     def forward(self, batch_input_ids, batch_attention_mask, batch_langs=None):
         if self.use_lang_emb:
+            # time_start = time()
             lang_embs = self.lang_MLP(batch_langs)
+            # lang_MLP_time = time()
+            # print(f"lang_MLP time: {lang_MLP_time - time_start}")
             batch_W_A, batch_W_B = self.PGN(lang_embs)
+            # PGN_time = time()
+            # print(f'PGN time: {PGN_time - lang_MLP_time}')
             self.lora_weight_replace(batch_W_A, batch_W_B)
+            # weight_replace_time = time()
+            # print(f'weight replace time: {weight_replace_time - PGN_time}')
             assert self.use_adapter, "Adapter is required"
 
         repre = self.llm(batch_input_ids, batch_attention_mask).last_hidden_state
+        # repre_time = time()
+        # print(f'repre time: {repre_time - weight_replace_time}')
         if self.use_lang_emb: 
             self.lora_weight_flush()
+            # flush_time = time()
+            # print(f'flush time: {flush_time - repre_time}')
         return repre
 
 
@@ -140,11 +152,11 @@ class Lang_MLP(nn.Module):
         super(Lang_MLP, self).__init__()
         self.feats_set = ["syntax_knn", "phonology_knn", "inventory_knn"]
         self.input_dim = 79 + 20 + 89
+        self.langs_1hot = self.get_langs_1hot()
         self.fc1 = nn.Linear(self.input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, lang_dim)
 
-    @property
-    def langs_1hot(self):
+    def get_langs_1hot(self):
         possible_lans = ['eng', 'deu', 'fra', 'heb', 'hun', 'jpn', 'kor', 'swe', 'zho', 'akk', 'kaz', 'kmr', 'mar', 'san', 'tam', 'yor']
         one_hots = [(get_features(possible_lans, feat, minimal=True)) for feat in self.feats_set]
         tmp_dict = {lan: one_hots[0][lan] + one_hots[1][lan] + one_hots[2][lan] for lan in possible_lans}
