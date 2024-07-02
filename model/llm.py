@@ -10,7 +10,6 @@ from transformers import AutoModel
 from peft import LoraConfig, TaskType, get_peft_model
 from typing import Optional
 
-
 get_trainable_parameters_size = lambda model: sum([param.numel() for _, param in model.named_parameters() if param.requires_grad])
 
 
@@ -31,6 +30,11 @@ class LLM(nn.Module):
         self.use_adapter = LMpara.use_adapter
         self.use_lang_emb = LMpara.use_lang_emb
 
+        if not self.use_adapter and 'bloom' in llm_path:
+            assert False, "better not run this setting, waste of time!"
+            for param in self.llm.parameters():
+                param.requires_grad = False
+
         if self.use_adapter:
             lora_r, lora_alpha, lora_dropout = LMpara.lora_r, LMpara.lora_alpha, LMpara.lora_dropout
             peft_config = LoraConfig(
@@ -39,7 +43,8 @@ class LLM(nn.Module):
                 r=lora_r, 
                 lora_alpha=lora_alpha, 
                 lora_dropout=lora_dropout,
-                target_modules=['query', 'key', 'value', 'query_key_value'])
+                target_modules=['query', 'key', 'value', 'query_key_value']
+            )
             self.llm = get_peft_model(self.llm, peft_config).to('cuda')
             self.lora_size, self.llm_size = self.llm.get_nb_trainable_parameters()
 
@@ -85,9 +90,11 @@ class LLM(nn.Module):
             for sub_name, sub_module in module.named_children():
                 full_name = f"{name}_dot_{sub_name}" if name else sub_name
                 if full_name in b_W_A.keys() and isinstance(sub_module, BatchLoraLinear):
-                    setattr(sub_module, 'weight', b_W_A[full_name])
+                    sub_module.weight = b_W_A[full_name]
+                    # setattr(sub_module, 'weight', b_W_A[full_name])
                 elif full_name in b_W_B.keys() and isinstance(sub_module, BatchLoraLinear):
-                    setattr(sub_module, 'weight', b_W_B[full_name])
+                    sub_module.weight = b_W_B[full_name]
+                    # setattr(sub_module, 'weight', b_W_B[full_name])
                 else:
                     recur_replace(sub_module, full_name, b_W_A, b_W_B)
         recur_replace(self.llm, '', batch_W_A, batch_W_B)
@@ -100,8 +107,8 @@ class LLM(nn.Module):
             for sub_name, sub_module in module.named_children():
                 full_name = f"{name}_dot_{sub_name}" if name else sub_name
                 if isinstance(sub_module, BatchLoraLinear):
-                    # print(f"Flushed {full_name}")
-                    setattr(sub_module, 'weight', None)
+                    sub_module.weight = None
+                    # setattr(sub_module, 'weight', None)
                 else:
                     recur_replace(sub_module, full_name)
         recur_replace(self.llm, '')
@@ -114,19 +121,16 @@ class LLM(nn.Module):
         elif self.use_lang_emb:
             print(f"use lang emb: adapter size {self.PGN.param_size}")
     
-
     def forward(self, batch_input_ids, batch_attention_mask, batch_langs=None):
         if self.use_lang_emb:
             lang_embs = self.lang_MLP(batch_langs)
             batch_W_A, batch_W_B = self.PGN(lang_embs)
-
-            # self.llm.print_trainable_parameters()
             self.lora_weight_replace(batch_W_A, batch_W_B)
-            # self.llm.print_trainable_parameters()
             assert self.use_adapter, "Adapter is required"
 
         repre = self.llm(batch_input_ids, batch_attention_mask).last_hidden_state
-        if self.use_lang_emb: self.lora_weight_flush()
+        if self.use_lang_emb: 
+            self.lora_weight_flush()
         return repre
 
 

@@ -7,7 +7,7 @@ import math
 import random
 import numpy as np
 from typing import List
-# os.environ["CUDA_VISIBLE_DEVICES"] = '7'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '4'
 from model.treebank import load_treebank, build_label_vocab, build_tag_vocab, Tree
 from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau

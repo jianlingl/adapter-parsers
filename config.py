@@ -5,10 +5,10 @@ import torch
 class LLMParam():
     def __init__(self) -> None:
         # self.plm = '/data/hfmodel/bert-base-multilingual-cased'
-        self.plm = '/data/hfmodel/xlm-roberta-large'
-        # self.plm = '/data/hfmodel/bloom-7b1'
+        # self.plm = '/data/hfmodel/xlm-roberta-large'
+        self.plm = '/data/hfmodel/bloom-7b1'
         self.lm_dtype = torch.float32 if 'bloom' not in self.plm else torch.bfloat16
-        self.use_adapter = False
+        self.use_adapter = True
         self.use_lang_emb = False
         self.lang_hidden_dim = 64
         self.lang_dim = 8
@@ -25,7 +25,7 @@ class Hparam():
             self.tag_vocab = None
             # train
             self.LMpara = LLMParam()
-            self.max_epoch = 80
+            self.max_epoch = 25
             self.batch_size = 8
             self.big_batch_size = 32
             self.seed = 6666 if args.seed is None else args.seed

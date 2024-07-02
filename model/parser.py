@@ -180,7 +180,7 @@ class Parser(nn.Module):
     def encode_and_collate(self, trees: List[Tree]):
         batched_words = [list(tree.leaves()) for tree in trees]
         batched_tags = [list(tree.pos()) for tree in trees]
-        batched_langs = [list(tree.lang for tree in trees)]
+        batched_langs = [tree.lang for tree in trees]
 
         batched_tokenized = self.tokenizer(batched_words)
         batched_tokenized["langs"] = batched_langs
