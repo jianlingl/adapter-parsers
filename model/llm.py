@@ -27,7 +27,7 @@ class LLM(nn.Module):
     def __init__(self, LMpara: LLMParam):
         super(LLM, self).__init__()
         llm_path = LMpara.plm
-        self.llm = AutoModel.from_pretrained(llm_path, revision='master', device_map='auto', torch_dtype=LMpara.lm_dtype).to("cuda")
+        self.llm = AutoModel.from_pretrained(llm_path, revision='master', device_map='cuda:0', torch_dtype=LMpara.lm_dtype)
         self.use_adapter = LMpara.use_adapter
         self.use_lang_emb = LMpara.use_lang_emb
 
@@ -46,17 +46,17 @@ class LLM(nn.Module):
                 lora_dropout=lora_dropout,
                 target_modules=['query', 'key', 'value', 'query_key_value']
             )
-            self.llm = get_peft_model(self.llm, peft_config).to('cuda')
+            self.llm = get_peft_model(self.llm, peft_config)
             self.lora_size, self.llm_size = self.llm.get_nb_trainable_parameters()
 
         if self.use_lang_emb:
             assert self.use_adapter, "Language embedding requires adapter"
             lang_hidden_dim, lang_dim = LMpara.lang_hidden_dim, LMpara.lang_dim
-            self.lang_MLP = Lang_MLP(lang_hidden_dim, lang_dim).to('cuda')
+            self.lang_MLP = Lang_MLP(lang_hidden_dim, lang_dim)
 
             lora_num, lora_A, lora_B = self.get_lora_modules(lora_r)
             self.lora_init_replace()
-            self.PGN = PGN(lang_dim, lora_num, lora_r, lora_A, lora_B, self.lora_A_keys, self.lora_B_keys).to('cuda')
+            self.PGN = PGN(lang_dim, lora_num, lora_r, lora_A, lora_B, self.lora_A_keys, self.lora_B_keys)
 
     def get_lora_modules(self, lora_r):
         lora_A_pattern, lora_B_pattern = {}, {}
@@ -123,6 +123,7 @@ class LLM(nn.Module):
             print(f"use lang emb: adapter size {self.PGN.param_size}")
     
     def forward(self, batch_input_ids, batch_attention_mask, batch_langs=None):
+        print(batch_langs)
         if self.use_lang_emb:
             # time_start = time()
             lang_embs = self.lang_MLP(batch_langs)
@@ -198,7 +199,7 @@ class PGN(nn.Module):
         batch_W_B = nn.ParameterDict({
             key_B: torch.einsum('bi, bikr->bkr', batch_lang_embs, self.paramsB[key_B].expand(batch_size, -1, -1, -1)) 
             for key_B in self.paramsB.keys()})
-        return batch_W_A.to('cuda'), batch_W_B.to('cuda')
+        return batch_W_A, batch_W_B
 
 
 # if __name__ == '__main__':

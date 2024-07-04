@@ -30,7 +30,6 @@
             "justMyCode": false,
             "args": [
                 "test",
-                 "--device", "6",
                  "--test-path", "/home/ljl/rules_UD2UC_trees/UD2UC/UC.24.4.21/most_simp_no_mul-labels/zh.test",
                  "--model-path", "log/saved_parsers/most_simp_no_mullabel/zh_our.pt",
             ]
@@ -39,23 +38,23 @@
             "name": "train",
             "type": "python",
             "request": "launch",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "5",
+            },
             "program": "main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
                 "train",
-                "--seed",
-                "8888",
-                "--device",
-                "5",
-                "--model-path-base",
-                "log/saved_parsers/000.pt",
-                "--train-path",
-                "data/UD2UC/",
-                "--dev-path",
-                "data/UD2UC/",
-                "--test-path",
-                "data/UD2UC/",
+                "--seed", "8888",
+                "--plm", "/data/hfmodel/bloom-7b1",
+                "--use-adapter",
+                "--use-lang-emb",
+                "--batch-size", "16",
+                "--model-path-base", "log/saved_parsers/000.pt",
+                "--train-path", "data/small/",
+                "--dev-path", "data/small/",
+                "--test-path", "data/small/",
             ]
         },
     ]

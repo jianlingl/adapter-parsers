@@ -7,7 +7,6 @@ import math
 import random
 import numpy as np
 from typing import List
-# os.environ["CUDA_VISIBLE_DEVICES"] = '5'
 from model.treebank import load_treebank, build_label_vocab, build_tag_vocab, Tree
 from model.parser import Parser
 from model.learning_rates import WarmupThenReduceLROnPlateau
@@ -90,7 +89,6 @@ def save_model(parser: Parser, hparam: Hparam, path):
 
 
 def run_train(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     hparam = Hparam(args)
     np.random.seed(hparam.seed)
     torch.manual_seed(hparam.seed)
@@ -204,7 +202,6 @@ def run_train(args):
 
 
 def run_test(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     parser = Parser.from_trained(args.model_path)
     print(parser.hparam.__dict__)
     # label_set = {'NP', 'VP', 'AJP', 'AVP', 'PP', 'S','CONJP', 'COP', 'X'}
@@ -227,7 +224,6 @@ def run_test(args):
 
 
 def run_pred(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     # pred_bank = load_raw_snts()
     pass
 
@@ -239,7 +235,10 @@ def main():
     subparser = subparsers.add_parser("train")
     subparser.set_defaults(callback=run_train)
     subparser.add_argument("--seed", type=int)
-    subparser.add_argument("--device", default='0')
+    subparser.add_argument("--plm", default='/data/hfmodel/bert-base-multilingual-cased') #'bert-base-multilingual-cased', 'xlm-roberta-large', '/bloom-7b1'
+    subparser.add_argument("--use-adapter", action="store_true")
+    subparser.add_argument("--use-lang-emb", action="store_true")
+    subparser.add_argument("--batch-size", default=32, type=int)
     subparser.add_argument("--train-path", default="")
     subparser.add_argument("--dev-path", default="")
     subparser.add_argument("--test-path", default="")
@@ -248,7 +247,6 @@ def main():
 
     subparser = subparsers.add_parser("test")
     subparser.set_defaults(callback=run_test)
-    subparser.add_argument("--device", default="0")
     subparser.add_argument("--model-path", required=True)
     subparser.add_argument("--test-path", default="")
     subparser.add_argument("--evalb-dir", default="EVALB")
@@ -258,7 +256,6 @@ def main():
 
     subparser = subparsers.add_parser("pred")
     subparser.set_defaults(callback=run_pred)
-    subparser.add_argument("--device", default='0')
     subparser.add_argument("--model-path", required=True)
     subparser.add_argument("--pred-raw", default="")
     subparser.add_argument("--opt-path", default="dataset/pred_4annotation_projection")
