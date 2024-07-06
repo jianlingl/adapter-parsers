@@ -11,8 +11,9 @@ from peft import LoraConfig, TaskType, get_peft_model
 from typing import Optional
 from time import time
 
+get_trainable_parameters_size_by_name = lambda model: {name: param.numel() for name, param in model.named_parameters() if param.requires_grad}
 get_trainable_parameters_size = lambda model: sum([param.numel() for _, param in model.named_parameters() if param.requires_grad])
-
+print_trainable_parameters = lambda model: print({name: param.grad for name, param in model.named_parameters() if param.grad is not None})
 
 class BatchLoraLinear(nn.Module):
     def __init__(self, batch_weight: Optional[torch.Tensor] = None):
@@ -92,16 +93,12 @@ class LLM(nn.Module):
                 full_name = f"{name}_dot_{sub_name}" if name else sub_name
                 if full_name in b_W_A.keys() and isinstance(sub_module, BatchLoraLinear):
                     sub_module.weight = b_W_A[full_name]
-                    # setattr(sub_module, 'weight', b_W_A[full_name])
                 elif full_name in b_W_B.keys() and isinstance(sub_module, BatchLoraLinear):
                     sub_module.weight = b_W_B[full_name]
-                    # setattr(sub_module, 'weight', b_W_B[full_name])
                 else:
                     recur_replace(sub_module, full_name, b_W_A, b_W_B)
         recur_replace(self.llm, '', batch_W_A, batch_W_B)
-        cur_trainable_size = get_trainable_parameters_size(self.llm)
-        batch_size = list(batch_W_A.values())[0].size(0)
-        assert cur_trainable_size == self.lora_size * batch_size, f"Mismatch in trainable parameters{cur_trainable_size, self.lora_size, batch_size}"
+        assert get_trainable_parameters_size(self.llm) == 0, "Mismatch in trainable parameters"
 
     def lora_weight_flush(self):
         def recur_replace(module: nn.Module, name: str):
@@ -119,31 +116,21 @@ class LLM(nn.Module):
         if self.use_adapter:
             print("use adapter:")
             self.llm.print_trainable_parameters()
-        elif self.use_lang_emb:
+        if self.use_lang_emb:
             print(f"use lang emb: adapter size {self.PGN.param_size}")
     
     def forward(self, batch_input_ids, batch_attention_mask, batch_langs=None):
-        print(batch_langs)
+        # print(batch_langs)
         if self.use_lang_emb:
-            # time_start = time()
             lang_embs = self.lang_MLP(batch_langs)
-            # lang_MLP_time = time()
-            # print(f"lang_MLP time: {lang_MLP_time - time_start}")
             batch_W_A, batch_W_B = self.PGN(lang_embs)
-            # PGN_time = time()
-            # print(f'PGN time: {PGN_time - lang_MLP_time}')
             self.lora_weight_replace(batch_W_A, batch_W_B)
-            # weight_replace_time = time()
-            # print(f'weight replace time: {weight_replace_time - PGN_time}')
             assert self.use_adapter, "Adapter is required"
 
+        # self.print_trainable_parameters()
         repre = self.llm(batch_input_ids, batch_attention_mask).last_hidden_state
-        # repre_time = time()
-        # print(f'repre time: {repre_time - weight_replace_time}')
         if self.use_lang_emb: 
             self.lora_weight_flush()
-            # flush_time = time()
-            # print(f'flush time: {flush_time - repre_time}')
         return repre
 
 
@@ -193,17 +180,12 @@ class PGN(nn.Module):
     def forward(self, batch_lang_embs):
         batch_size = batch_lang_embs.size(0)
 
-        batch_W_A = nn.ParameterDict({
-            key_A: torch.einsum('bi, birk->brk', batch_lang_embs, self.paramsA[key_A].expand(batch_size, -1, -1, -1)) 
-            for key_A in self.paramsA.keys()})
-        batch_W_B = nn.ParameterDict({
-            key_B: torch.einsum('bi, bikr->bkr', batch_lang_embs, self.paramsB[key_B].expand(batch_size, -1, -1, -1)) 
-            for key_B in self.paramsB.keys()})
+        batch_W_A = {key_A: torch.einsum('bi, birk->brk', batch_lang_embs, self.paramsA[key_A].expand(batch_size, -1, -1, -1)) 
+            for key_A in self.paramsA.keys()}
+        batch_W_B = {key_B: torch.einsum('bi, bikr->bkr', batch_lang_embs, self.paramsB[key_B].expand(batch_size, -1, -1, -1)) 
+            for key_B in self.paramsB.keys()}
         return batch_W_A, batch_W_B
 
 
 # if __name__ == '__main__':
-    # a = PGN(8, 24, 8, 768, 768, ['A' + str(i) for i in range(24)], ['B' + str(i) for i in range(24)])
-    # print(a.param_size)
-    # print(a.paramsA['A0'].shape)
-    # print(a.paramsB['B0'].shape)
+#     pass

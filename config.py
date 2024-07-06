@@ -7,10 +7,7 @@ class LLMParam():
         self.plm = args.plm
         self.use_adapter = args.use_adapter
         self.use_lang_emb = args.use_lang_emb
-
         self.lm_dtype = torch.float32 if 'bloom' not in self.plm else torch.bfloat16
-        self.use_adapter = True
-        self.use_lang_emb = True
         self.lang_hidden_dim = 64
         self.lang_dim = 8
         self.lora_r = 8
@@ -33,7 +30,7 @@ class Hparam():
             self.checks_per_epoch = 4
             # 优化器参数
             self.learning_rate = 0.00005
-            self.learning_rate_warmup_steps = 160 # decrease if the dataset is small
+            # self.learning_rate_warmup_steps = None # decrease if the dataset is small
             self.step_decay_factor = 0.5
             self.epoch_decay_patience = 3
             self.clip_grad_norm = 1000.0
