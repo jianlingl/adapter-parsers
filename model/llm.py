@@ -59,6 +59,9 @@ class LLM(nn.Module):
             self.lora_init_replace()
             self.PGN = PGN(lang_dim, lora_num, lora_r, lora_A, lora_B, self.lora_A_keys, self.lora_B_keys)
 
+            # 注册钩子函数
+            # self.PGN.register_hooks()
+
     def get_lora_modules(self, lora_r):
         lora_A_pattern, lora_B_pattern = {}, {}
         for name, module in self.llm.named_modules():
@@ -172,10 +175,29 @@ class PGN(nn.Module):
 
         assert len(lora_A_keys) == len(lora_B_keys) == lora_num, "Mismatch in lora_A and lora_B"
 
-        self.paramsA = nn.ParameterDict({key_A: nn.Parameter(torch.randn(lang_dim, lora_A, lora_r)) for key_A in lora_A_keys})
-        self.paramsB = nn.ParameterDict({key_B: nn.Parameter(torch.randn(lang_dim, lora_r, lora_B)) for key_B in lora_B_keys})
+        self.paramsA = nn.ParameterDict({key_A: nn.Parameter(torch.normal(0, 0.01, (lang_dim, lora_A, lora_r))) for key_A in lora_A_keys})
+        self.paramsB = nn.ParameterDict({key_B: nn.Parameter(torch.zeros(lang_dim, lora_r, lora_B)) for key_B in lora_B_keys})
 
         self.param_size = sum(p.numel() for p in self.paramsA.values()) + sum(p.numel() for p in self.paramsB.values())
+
+    # def register_hooks(self):
+    #     for name, param in self.paramsA.items():
+    #         if param.requires_grad:
+    #             param.register_hook(self.print_grad(name))
+    #     for name, param in self.paramsB.items():
+    #         if param.requires_grad:
+    #             param.register_hook(self.print_grad(name))
+
+    # def print_grad(self, name):
+    #     def hook(grad):
+    #         print(f'PGN | {name} Grad norm: {grad.norm().item()}')
+    #     return hook
+
+    # def print_params(self):
+    #     for name, param in self.paramsA.items():
+    #         print(f'PGN | {name} Param value: {param.data}')
+    #     for name, param in self.paramsB.items():
+    #         print(f'PGN | {name} Param value: {param.data}')
 
     def forward(self, batch_lang_embs):
         batch_size = batch_lang_embs.size(0)
